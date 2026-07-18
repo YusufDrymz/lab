@@ -253,7 +253,14 @@ describe('signature verification', () => {
 
 describe('event log', () => {
   it('stays bounded on a long run', () => {
-    const state = run(createInbox({ health: 'slow', arrivalEvery: 3 }), 3000)
-    expect(state.log.length).toBeLessThanOrEqual(300)
+    // A down endpoint with frequent arrivals is the fastest way to a noisy log:
+    // every arrival and every failed attempt writes a line. Kept deliberately
+    // short — `advance` clones the whole state per tick, so the cost grows with
+    // the event count and a longer run buys nothing but a slower CI.
+    const state = run(createInbox({ health: 'down', arrivalEvery: 2, baseBackoff: 2 }), 600)
+
+    // Exactly at the cap, not merely under it: if this were below 300 the test
+    // would pass without the trimming ever having run.
+    expect(state.log).toHaveLength(300)
   })
 })
