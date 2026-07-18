@@ -4,6 +4,7 @@ import KafkaPage from './pages/KafkaPage.vue'
 import HookkeepPage from './pages/HookkeepPage.vue'
 import IdempotencyPage from './pages/IdempotencyPage.vue'
 import PlansPage from './pages/PlansPage.vue'
+import ReconcilePage from './pages/ReconcilePage.vue'
 import NotFoundPage from './pages/NotFoundPage.vue'
 
 /**
@@ -18,11 +19,13 @@ const routes: RouteRecordRaw[] = [
   { path: '/hookkeep', component: HookkeepPage, name: 'hookkeep' },
   { path: '/idempotency', component: IdempotencyPage, name: 'idempotency' },
   { path: '/plans', component: PlansPage, name: 'plans' },
+  { path: '/reconcile', component: ReconcilePage, name: 'reconcile' },
   { path: '/tr', component: HomePage, name: 'home-tr' },
   { path: '/tr/kafka', component: KafkaPage, name: 'kafka-tr' },
   { path: '/tr/hookkeep', component: HookkeepPage, name: 'hookkeep-tr' },
   { path: '/tr/idempotency', component: IdempotencyPage, name: 'idempotency-tr' },
   { path: '/tr/plans', component: PlansPage, name: 'plans-tr' },
+  { path: '/tr/reconcile', component: ReconcilePage, name: 'reconcile-tr' },
   { path: '/:pathMatch(.*)*', component: NotFoundPage, name: 'not-found' },
 ]
 
