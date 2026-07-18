@@ -1,3 +1,4 @@
+import { REPOS } from './types'
 import type { Content } from './types'
 
 export const en: Content = {
@@ -323,6 +324,9 @@ export const en: Content = {
           {
             tone: 'danger',
             html: 'Then comes the part that turns an incident into a loop. Draining the DLQ back onto the main topic feels like recovery, but nothing about the message changed. It fails again, walks the chain again, and lands back in the DLQ — and on the way it competes with healthy traffic. <strong>Replay only helps after the fault is fixed.</strong> Try it in the wrong order below and watch the count come back.',
+          },
+          {
+            html: `Everything above is behaviour, not tooling — but the tooling is the reason it keeps happening: a DLQ topic shows you bytes, not why a message failed or whether you already replayed it. <a href="${REPOS.kafkaDlq}" target="_blank" rel="noreferrer noopener">kafka-dlq</a> is the tool built from this section — it indexes dead letters by error reason, marks a message that came back after a replay as <em>looping</em>, and refuses a replay that has no dry-run plan behind it.`,
           },
         ],
         predict: {

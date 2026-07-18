@@ -1,3 +1,4 @@
+import { REPOS } from './types'
 import type { Content } from './types'
 
 export const tr: Content = {
@@ -323,6 +324,9 @@ export const tr: Content = {
           {
             tone: 'danger',
             html: 'Sonra bir olayı döngüye çeviren kısım geliyor. DLQ\'yu ana topic\'e geri boşaltmak kurtarma gibi hissettirir ama mesajda değişen hiçbir şey yoktur. Yine başarısız olur, zinciri yine yürür ve tekrar DLQ\'ya düşer — üstelik yolda sağlıklı trafikle yarışır. <strong>Replay ancak hata düzeltildikten sonra işe yarar.</strong> Aşağıda yanlış sırayla dene ve sayacın geri geldiğini izle.',
+          },
+          {
+            html: `Yukarıdakilerin hepsi davranış, araç değil — ama bunun tekrar tekrar yaşanmasının sebebi tam olarak araç eksikliği: bir DLQ topic'i size byte gösterir, mesajın neden düştüğünü ya da onu daha önce replay edip etmediğinizi değil. <a href="${REPOS.kafkaDlq}" target="_blank" rel="noreferrer noopener">kafka-dlq</a> bu bölümden doğan araç — dead letter'ları hata sebebine göre indexler, replay sonrası geri düşen bir mesajı <em>looping</em> diye işaretler ve arkasında dry-run planı olmayan bir replay'i reddeder.`,
           },
         ],
         predict: {
