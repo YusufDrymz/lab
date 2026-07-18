@@ -22,6 +22,7 @@ incident, and pause / step / restart work exactly as you would expect.
 | [Webhooks, and where they go](https://lab.yusufdariyemez.com/hookkeep) | Webhooks · [hookkeep](https://github.com/YusufDrymz/hookkeep) | 4 |
 | [The same request, twice](https://lab.yusufdariyemez.com/idempotency) | Idempotency · [go-idempotent](https://github.com/YusufDrymz/go-idempotent) | 4 |
 | [This query will fall over in production](https://lab.yusufdariyemez.com/plans) | Query plans · [pg-plan-guard](https://github.com/YusufDrymz/pg-plan-guard) | 4 |
+| [The numbers do not add up](https://lab.yusufdariyemez.com/reconcile) | Data integrity · [data-watchdog](https://github.com/YusufDrymz/data-watchdog), [go-reconcile](https://github.com/YusufDrymz/go-reconcile) | 4 |
 
 ---
 
@@ -92,15 +93,36 @@ statistic went stale — and the plan quietly became a different plan.
 Node names, normalisation rules, finding codes and severities are taken from
 pg-plan-guard. It is a model of *why* a plan changes, not a planner — see below.
 
+## The numbers do not add up
+
+Nothing is down, no error was logged, every dashboard is green — and the total
+in the report does not match the database. These are the failures that survive
+monitoring, because monitoring watches whether the system is *running*.
+
+![Summing over a join: eight payments become fourteen rows, pay-2001 is counted three times, and the total is 5798.41 against an actual 3754.27](docs/reconcile.jpg)
+
+| # | Section | What it demonstrates |
+|---|---------|----------------------|
+| 0 | Row multiplication | `SUM(p.amount)` over `payments JOIN fees` counts a payment once per fee. Every row is real, the total is not, and a check written over it reports a number that was never true of the data. |
+| 1 | Orphans | An integrity check asserts every payment belongs to an order that exists. A count says something is wrong; the `evidence_sql` and its first five rows say what — the difference between an alert you can act on and one you have to reproduce by hand. |
+| 2 | Late, not lost | `min_age` keeps the scan from racing a webhook that is still on its way; `max_age` stops it guessing about records that belong in front of a person. If the provider says it never succeeded, the right action is to do nothing — repairing those would invent payments. |
+| 3 | Fail loud | A check that cannot run counts as violated, because a silent run and a healthy one are indistinguishable. And a freshness check on a replica adds the measured lag to its limit, so replication is not mistaken for stale traffic. |
+
+Two repositories, because this is two halves of one problem: data-watchdog
+notices, go-reconcile repairs. The check types, the `expect` language, the
+severities and the outcomes are theirs.
+
 ---
 
 ## What it is not
 
-Not an emulator, in any of the four. There is no Kafka wire protocol, no
+Not an emulator, in any of the five. There is no Kafka wire protocol, no
 replication or leader election; no HTTP stack or Postgres behind the webhook
 inbox; no real HMAC behind the signature section; and the query planner reads no
 statistics and costs no alternatives — it derives a plan shape from table size,
-index availability and the quality of the row estimate. Each model reproduces the
+index availability and the quality of the row estimate; and no SQL is executed
+anywhere — the queries shown next to each check are what you would write, and
+the model computes the number directly. Each model reproduces the
 behaviour its section is about and nothing more, and where it simplifies, the
 prose says so.
 
@@ -122,6 +144,7 @@ The interesting code is in `src/core/` — pure TypeScript, no Vue, no DOM:
 - `webhook.ts` — the webhook inbox: persist order, backoff, replay, verification
 - `idempotency.ts` — stored responses, the claim race, fingerprints, release
 - `plans.ts` — plan derivation, shape normalisation, and the diff that grades it
+- `watchdog.ts` — checks, the `expect` language, evidence, and the recovery scan
 - `prng.ts` — seeded RNG; `Math.random()` is not used anywhere in the core
 
 Each model is a pure `advance(state) -> state` function. The UI is the only part
