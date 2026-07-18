@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import HomePage from './pages/HomePage.vue'
 import KafkaPage from './pages/KafkaPage.vue'
+import HookkeepPage from './pages/HookkeepPage.vue'
 import NotFoundPage from './pages/NotFoundPage.vue'
 
 /**
@@ -12,8 +13,10 @@ import NotFoundPage from './pages/NotFoundPage.vue'
 const routes: RouteRecordRaw[] = [
   { path: '/', component: HomePage, name: 'home' },
   { path: '/kafka', component: KafkaPage, name: 'kafka' },
+  { path: '/hookkeep', component: HookkeepPage, name: 'hookkeep' },
   { path: '/tr', component: HomePage, name: 'home-tr' },
   { path: '/tr/kafka', component: KafkaPage, name: 'kafka-tr' },
+  { path: '/tr/hookkeep', component: HookkeepPage, name: 'hookkeep-tr' },
   { path: '/:pathMatch(.*)*', component: NotFoundPage, name: 'not-found' },
 ]
 

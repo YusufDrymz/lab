@@ -17,8 +17,8 @@ const localePath = useLocalePath()
       </div>
     </header>
 
-    <!-- The principles carry the page: with one lab listed, the reason these
-         exist has to do the work that a long list would otherwise do. -->
+    <!-- The principles still lead: they explain why the labs are built the way
+         they are, which the card summaries deliberately do not repeat. -->
     <section class="grid gap-6 border-t border-ink-800 py-12 sm:grid-cols-3">
       <div v-for="principle in content.home.principles" :key="principle.title">
         <h2 class="mb-2 text-sm font-semibold text-ink-50">{{ principle.title }}</h2>
@@ -31,29 +31,35 @@ const localePath = useLocalePath()
         {{ content.home.labsHeading }}
       </h2>
 
-      <RouterLink
-        :to="localePath('/kafka')"
-        class="group block rounded-xl border border-ink-800 bg-ink-900/40 p-6 transition hover:border-accent-500/60 hover:bg-ink-900/70 sm:p-8"
-      >
-        <h3
-          class="text-2xl font-semibold tracking-tight text-ink-50 transition group-hover:text-accent-400"
+      <!-- Two columns from lg up. Below that the cards stack: the topic lists
+           are the useful part and they need the width to stay one line each. -->
+      <div class="grid gap-5 lg:grid-cols-2">
+        <RouterLink
+          v-for="lab in content.home.labs"
+          :key="lab.path"
+          :to="localePath(lab.path)"
+          class="group flex flex-col rounded-xl border border-ink-800 bg-ink-900/40 p-6 transition hover:border-accent-500/60 hover:bg-ink-900/70 sm:p-8"
         >
-          {{ content.home.kafkaCard.title }}
-        </h3>
-        <p class="mt-3 max-w-2xl leading-relaxed text-ink-400">
-          {{ content.home.kafkaCard.summary }}
-        </p>
+          <h3
+            class="text-2xl font-semibold tracking-tight text-ink-50 transition group-hover:text-accent-400"
+          >
+            {{ lab.title }}
+          </h3>
+          <p class="mt-3 leading-relaxed text-ink-400">
+            {{ lab.summary }}
+          </p>
 
-        <ul class="mt-5 grid gap-x-6 gap-y-1.5 font-mono text-xs text-ink-500 sm:grid-cols-2">
-          <li v-for="topic in content.home.kafkaCard.topics" :key="topic">
-            <span class="text-accent-600">›</span> {{ topic }}
-          </li>
-        </ul>
+          <ul class="mt-5 grid gap-y-1.5 font-mono text-xs text-ink-500">
+            <li v-for="topic in lab.topics" :key="topic">
+              <span class="text-accent-600">›</span> {{ topic }}
+            </li>
+          </ul>
 
-        <p class="mt-6 text-sm font-medium text-accent-400">
-          {{ content.home.kafkaCard.cta }} →
-        </p>
-      </RouterLink>
+          <!-- mt-auto keeps the two calls to action aligned when the cards have
+               different numbers of topics. -->
+          <p class="mt-auto pt-6 text-sm font-medium text-accent-400">{{ lab.cta }} →</p>
+        </RouterLink>
+      </div>
     </section>
 
     <footer class="border-t border-ink-800 pt-8 text-sm text-ink-500">

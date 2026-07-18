@@ -16,10 +16,15 @@ provideContent(content)
  */
 watchEffect(() => {
   const c = content.value
-  const isHome = route.path === '/' || route.path === '/tr'
+
+  // The lab segment with the locale prefix stripped: '' on the home pages,
+  // otherwise 'kafka' or 'hookkeep'. Anything else is the not-found route,
+  // which falls back to the home title rather than claiming to be a lab.
+  const lab = route.path.replace(/^\/tr/, '').replace(/^\//, '')
+  const labTitle = lab === 'kafka' ? c.kafka.title : lab === 'hookkeep' ? c.hookkeep.title : null
 
   document.documentElement.lang = c.locale
-  document.title = isHome ? `${c.home.title} — ${c.home.tagline}` : `${c.kafka.title} — lab`
+  document.title = labTitle ? `${labTitle} — lab` : `${c.home.title} — ${c.home.tagline}`
 
   const origin = window.location.origin
   const alternate = useAlternatePath(route.path, c.locale)
