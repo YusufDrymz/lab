@@ -2,7 +2,7 @@
 
 Interactive explanations of backend systems, starting with Kafka.
 
-Live at **[lab.yusufdariyemez.com](https://lab.yusufdariyemez.com)**.
+Live at **[lab.yusufdariyemez.com](https://lab.yusufdariyemez.com)** — English at `/`, Turkish at `/tr`.
 
 ## Kafka, by behaviour
 
