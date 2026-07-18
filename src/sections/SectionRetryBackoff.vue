@@ -18,7 +18,8 @@ import {
 import { useTicker } from '../composables/useTicker'
 import { useContent } from '../content'
 
-const c = computed(() => useContent().value.hookkeep.sections.retryBackoff)
+const content = useContent()
+const c = computed(() => content.value.hookkeep.sections.retryBackoff)
 
 const health = ref<EndpointHealth>('down')
 

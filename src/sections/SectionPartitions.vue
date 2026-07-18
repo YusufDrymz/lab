@@ -11,7 +11,8 @@ import { CUSTOMERS, HOT_CUSTOMER } from '../core/scenario'
 import { useTicker } from '../composables/useTicker'
 import { useContent } from '../content'
 
-const c = computed(() => useContent().value.kafka.sections.partitions)
+const content = useContent()
+const c = computed(() => content.value.kafka.sections.partitions)
 
 const partitionCount = ref(3)
 const skewed = ref(false)

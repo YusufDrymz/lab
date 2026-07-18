@@ -16,7 +16,8 @@ import { makeOrder } from '../core/scenario'
 import { createRng } from '../core/prng'
 import { useContent } from '../content'
 
-const c = computed(() => useContent().value.kafka.sections.writePath)
+const content = useContent()
+const c = computed(() => content.value.kafka.sections.writePath)
 
 const strategy = ref<WriteStrategy>('dual-write')
 const crashAt = ref<CrashPoint>('after-db-commit')

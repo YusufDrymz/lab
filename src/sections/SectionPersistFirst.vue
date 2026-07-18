@@ -17,7 +17,8 @@ import {
 import { useTicker } from '../composables/useTicker'
 import { useContent } from '../content'
 
-const c = computed(() => useContent().value.hookkeep.sections.persistFirst)
+const content = useContent()
+const c = computed(() => content.value.hookkeep.sections.persistFirst)
 
 const mode = ref<WriteMode>('persist-first')
 

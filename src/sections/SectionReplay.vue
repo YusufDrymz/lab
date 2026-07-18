@@ -17,7 +17,8 @@ import {
 import { useTicker } from '../composables/useTicker'
 import { REPOS, useContent } from '../content'
 
-const c = computed(() => useContent().value.hookkeep.sections.replay)
+const content = useContent()
+const c = computed(() => content.value.hookkeep.sections.replay)
 
 /**
  * Starts with the endpoint already down and a short attempt budget, so a

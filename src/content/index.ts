@@ -18,6 +18,17 @@ export function provideContent(content: Ref<Content>): void {
   provide(KEY, content)
 }
 
+/**
+ * Must be called at the top level of `setup`, and the returned ref used from
+ * there on — never called again inside a computed getter or a handler.
+ *
+ * `inject` only resolves while a component instance is current. A getter like
+ * `computed(() => useContent().value.x)` works on first evaluation, because
+ * that happens during setup, and then throws the next time the computed is
+ * invalidated — on a locale switch, or while the component is being torn down.
+ * Every section had this shape once; the failure only ever showed up in the
+ * browser console, never in a test.
+ */
 export function useContent(): Ref<Content> {
   const content = inject(KEY)
   if (!content) throw new Error('useContent() used outside a content provider')

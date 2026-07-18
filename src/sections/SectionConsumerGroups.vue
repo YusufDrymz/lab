@@ -9,7 +9,8 @@ import { addConsumer, advance, createSim, killConsumer } from '../core/cluster'
 import { useTicker } from '../composables/useTicker'
 import { useContent } from '../content'
 
-const c = computed(() => useContent().value.kafka.sections.groups)
+const content = useContent()
+const c = computed(() => content.value.kafka.sections.groups)
 
 const build = () =>
   createSim({ seed: 77, partitionCount: 3, produceEveryTicks: 5, processingTicks: 5 }, ['consumer-1'])

@@ -10,7 +10,8 @@ import { advance, createSim, killConsumer, type CommitMode } from '../core/clust
 import { useTicker } from '../composables/useTicker'
 import { useContent } from '../content'
 
-const c = computed(() => useContent().value.kafka.sections.offsets)
+const content = useContent()
+const c = computed(() => content.value.kafka.sections.offsets)
 
 const commitMode = ref<CommitMode>('after-processing')
 

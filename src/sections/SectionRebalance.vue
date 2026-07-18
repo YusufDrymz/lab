@@ -18,7 +18,8 @@ import {
 import { useTicker } from '../composables/useTicker'
 import { useContent } from '../content'
 
-const c = computed(() => useContent().value.kafka.sections.rebalance)
+const content = useContent()
+const c = computed(() => content.value.kafka.sections.rebalance)
 
 const strategy = ref<RebalanceStrategy>('eager')
 

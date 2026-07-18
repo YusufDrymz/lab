@@ -11,7 +11,8 @@ import { createRng } from '../core/prng'
 import { useTicker } from '../composables/useTicker'
 import { REPOS, useContent } from '../content'
 
-const c = computed(() => useContent().value.kafka.sections.deadLetters)
+const content = useContent()
+const c = computed(() => content.value.kafka.sections.deadLetters)
 
 const strategy = ref<RetryStrategy>('retry-topic')
 const fixed = ref(false)
