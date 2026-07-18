@@ -278,8 +278,15 @@ describe('lag', () => {
 
 describe('event log', () => {
   it('stays bounded on a long run', () => {
-    const s = run(createSim({ seed: 41, produceEveryTicks: 1 }), 2000)
-    expect(s.events.length).toBeLessThanOrEqual(400)
+    // Kept short on purpose. `advance` clones the whole state per tick, so the
+    // cost grows with the log and the partitions it has already accumulated;
+    // at 2000 ticks this sat just under vitest's 5s default and timed out on a
+    // loaded CI runner while passing locally every time.
+    const s = run(createSim({ seed: 41, produceEveryTicks: 1 }), 700)
+
+    // Exactly at the cap rather than merely under it: below 400 the test would
+    // pass without the trimming ever having run.
+    expect(s.events).toHaveLength(400)
   })
 
   it('stamps every event with the tick it happened on', () => {
