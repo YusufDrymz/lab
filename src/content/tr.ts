@@ -99,6 +99,20 @@ export const tr: Content = {
         ],
         cta: 'Lab\'ı aç',
       },
+      {
+        path: '/plans',
+        topic: 'Query plan\'leri',
+        title: 'Bu sorgu production\'da patlar',
+        summary:
+          'Burada üç milisaniye, orada kırk saniye ve SQL hiç değişmedi. Planı neyin oynattığı ve gerçek regresyonu kaymış bir literal\'den ayırmak üzerine dört bölüm.',
+        topics: [
+          'Bir fonksiyonun kullanılmaz kıldığı index',
+          'Sequential scan\'in iyi olmaktan çıktığı yer',
+          'Nested loop\'lar ve arkalarındaki tahmin',
+          'Plan şekli: maskeleme, şeffaf düğümler, eşdeğerlik',
+        ],
+        cta: 'Lab\'ı aç',
+      },
     ],
   },
 
@@ -766,6 +780,198 @@ export const tr: Content = {
           storeLabel: 'idempotency_keys',
           released: 'key serbest bırakıldı',
           empty: 'satır yok',
+        },
+      },
+    },
+  },
+
+  plans: {
+    topic: 'Query plan\'leri',
+    title: 'Bu sorgu production\'da patlar',
+    intro: [
+      {
+        html: 'Sorgu senin makinende 3 ms, production\'da 40 saniye. İlk şüpheli satır sayısı ama cevabın tamamı nadiren odur — aynı veri üzerinde aynı sorgu, PostgreSQL\'in seçtiği <strong>plan</strong>\'a göre hızlı da olabilir felaket de.',
+      },
+      {
+        html: 'Plan regresyonlarını review etmeyi tatsız yapan da bu. SQL değişmedi. Onu bozan pull request\'te sorguya kimse dokunmadı. Bir index düştü, bir kolon fonksiyonun içine girdi, bir istatistik bayatladı — ve plan sessizce başka bir plan oldu.',
+      },
+      {
+        tone: 'warn',
+        html: '<strong>Bu, PostgreSQL\'in planner\'ı değil.</strong> İstatistik okumuyor, alternatiflerin maliyetini çıkarmıyor, birkaç seçenekten fazlasını değerlendirmiyor. Bu, planın <em>neden</em> değiştiğinin bir modeli: tablo boyutu, index\'in kullanılabilir olup olmadığı ve satır tahmininin ne kadar isabetli olduğu. Node isimleri, normalizasyon kuralları, finding kodları ve severity\'ler <code>pg-plan-guard</code>\'dan alındı; yani burada öğrendiğin şey onun gerçek çıktısıyla birebir örtüşüyor.',
+      },
+    ],
+    nav: ['Kaybolan index', 'Ölçek', 'Kötü tahmin', 'Plan şekli'],
+
+    sections: {
+      lostIndex: {
+        title: 'Kullanılmaz olan index',
+        lede: 'Index hâlâ duruyor. Sorgu hâlâ çalışıyor. Sadece artık onu kullanamıyor ve bunu kimse söylemiyor.',
+        prose: [
+          {
+            html: '<code>email</code> üzerindeki bir btree o kolonun değerlerini saklar. <code>lower(email) = ?</code> istediğinde index işe yaramaz: planner\'ın hangi satırların eşleştiğini bulmak için saklanan her değere <code>lower()</code> uygulaması gerekirdi — ki bu da kaçınmaya çalıştığı sequential scan\'in ta kendisi.',
+          },
+          {
+            tone: 'danger',
+            html: 'Seni uyaran hiçbir şey yok. Sorgu geçerli, index hâlâ orada, testler geçiyor. On bin satırlık bir geliştirme veritabanında tarama bir milisaniye sürüyor ve kimse fark etmiyor. Fatura, tablo büyüdüğünde geliyor.',
+          },
+          {
+            html: 'Çözüm, sorgunun kullandığı ifadenin üzerine bir index: <code>CREATE INDEX ... ON customers (lower(email))</code>. Ondan sonra planner predicate\'i tanıyor ve tekrar lookup\'a dönüyor. Aç kapa yap ve node\'un değişmesini izle.',
+          },
+          {
+            tone: 'accent',
+            html: 'Bir plan guard\'ın var olma sebebi tam olarak bu sınıf değişiklik. Index düşürmek, hiçbir uygulama koduna dokunmayan tek satırlık bir migration\'dır; yani zararsız görünür. Bozduğu sorgu ise bambaşka bir repoda yaşıyor olabilir.',
+          },
+        ],
+        predict: {
+          question:
+            'email üzerinde bir btree var. Sorgu lower(email) ile filtreliyor. Planner ne yapar?',
+          options: [
+            'Index\'i kullanır, sonra sonuçlara lower() uygular',
+            'Index\'i yok sayıp tabloyu tarar',
+            'Tip uyuşmazlığı hatası verir',
+          ],
+          answer: 1,
+          explanation:
+            'Index lower(email)\'i değil email\'i tutuyor. Fonksiyonu her satırda çalıştırmadan eşleşen kayıtları bulmanın bir yolu yok — bu da sequential scan demek. Index yanlış değil, sadece uygulanabilir değil.',
+        },
+        ui: {
+          predicateLabel: 'Predicate',
+          plain: 'created_at >= ?',
+          lower: 'lower(email) = ?',
+          addFunctional: 'Fonksiyonel index ekle',
+          dropFunctional: 'Fonksiyonel index\'i düşür',
+          planLabel: 'Plan',
+          estimate: 'tahmini',
+          rowsLabel: 'satır',
+        },
+      },
+
+      scale: {
+        title: 'Bin satır, on milyon satır değildir',
+        lede: 'Sequential scan bir hata değil. Doğru plandır — en kötüsü hâline gelene kadar.',
+        prose: [
+          {
+            html: 'Bin satırlık bir tabloyu baştan sona okumak neredeyse bedava, üstelik sıralı okumak çoğu zaman index\'in getirdiği rastgele erişimden hızlı. Planner bunu bilir; küçük tabloda <code>Seq Scan</code> görmenin sebebi budur ve kimsenin telaşlanmasına gerek yoktur.',
+          },
+          {
+            html: 'Tablo boyutunu yukarı sürükle. Tarama maliyeti her satırla birlikte büyüyor, çünkü satır başına aynı işi yapıyor ve satır sayısı artıyor. Indexli lookup ise neredeyse yerinden kıpırdamıyor: derinliği logaritmik büyüyen bir ağaçtan iniyor ve yalnız eşleşeni okuyor.',
+          },
+          {
+            tone: 'warn',
+            html: 'Yani staging\'de doğru olan plan, production\'da başka bir plan; ve aradaki fark iki kat değil — sayfa açılışı ile timeout arasındaki fark. Verinin onda biriyle çalışan bir staging, gerçekte koşacağın planı test etmiyor.',
+          },
+          {
+            html: 'Birkaç bin eşleşen satırın üstünde bu model <code>Bitmap Heap Scan</code>\'e geçiyor: önce eşleşen konumları topla, sonra heap\'i zıplayarak değil fiziksel sırayla oku. Aynı index, aynı erişim yolu — son bölüm de bir guard\'ın bunu neden regresyon saymaması gerektiğini anlatıyor.',
+          },
+        ],
+        predict: {
+          question:
+            'Aynı sorgu 1.000 satıra ve 10.000.000 satıra karşı çalışıyor. Sequential scan\'e ne olur?',
+          options: [
+            'Aşağı yukarı aynı hızda kalır, diskler sıralı okur',
+            'Tabloyla birlikte büyür, milisaniyeden timeout\'a',
+            'Planner iki boyutta da onu zaten seçmez',
+          ],
+          answer: 1,
+          explanation:
+            'Sequential scan satır başına sabit iş yapar, yani maliyeti tabloyla doğrusaldır. Bin satırda bu görünmez; on milyonda incident\'ın kendisidir. Indexli lookup logaritmik büyür — iki eğrinin kesişme sebebi budur.',
+        },
+        ui: {
+          rowsLabel: 'orders satır sayısı',
+          withIndex: 'Index ile',
+          withoutIndex: 'Index olmadan',
+          planLabel: 'Plan',
+          estimate: 'tahmini',
+          slower: 'daha yavaş',
+        },
+      },
+
+      nestedLoop: {
+        title: '400 kat şaşan tahmin',
+        lede: 'Nested loop, dış taraf gerçekten küçükse var olan en hızlı join\'dir. Planner yanıldığını çalışma anında öğrenir.',
+        prose: [
+          {
+            html: 'İki tabloyu join ederken PostgreSQL birkaç stratejiden birini seçer. <strong>Nested loop</strong> dış satırları gezip her birini iç tarafta arar — dış taraf birkaç satırsa yenilmez. <strong>Hash join</strong> ise bir kez hash tablosu kurup onu yoklar; başlaması daha pahalı, satır başına çok daha ucuzdur.',
+          },
+          {
+            html: 'Seçim bir <em>tahminden</em> yapılır. İstatistikler filtrenin 30 satır eşleştirdiğini söylüyorsa loop bariz doğrudur. Gerçekte 12.000 eşleşiyorsa aynı plan on iki bin kez iç arama yapar ve 4 ms süren sorgu yarım dakika sürer.',
+          },
+          {
+            tone: 'danger',
+            html: 'Bunların hiçbiri PostgreSQL\'de bir bug değil ve hiçbiri sorguda görünmüyor. İstatistikler toplu yüklemeden sonra, backfill\'den sonra, tablo autovacuum\'ün örnekleyebildiğinden hızlı büyüdüğünde bayatlar. Plan, yanlış sayıdan çıkarılmış makul bir sonuçtur.',
+          },
+          {
+            tone: 'accent',
+            html: 'Join yöntemi değişikliği <code>warn</code> alır, <code>crit</code> değil: bazen gerçekten değişmiş veriye verilmiş meşru bir cevaptır. Bu, diff\'te görüp karar vermek isteyeceğin türden bir finding; tek başına deploy\'u durdurması gereken türden değil.',
+          },
+        ],
+        predict: {
+          question:
+            'İstatistikler filtrenin 30 satır eşleştirdiğini söylüyor, gerçekte 12.000 eşleşiyor. Planner nested loop seçti. Ne olur?',
+          options: [
+            'Sorgu ortasında fark edip hash join\'e geçer',
+            '12.000 kez iç arama yapar ve planlanandan çok daha uzun sürer',
+            'Sadece planladığı 30 satırı döner',
+          ],
+          answer: 1,
+          explanation:
+            'Plan, çalışma başlamadan önce sabitlenir; koşarken hiçbir şey değişmez. Loop, gerçekte bulduğu her satır için çalışır — kötü tahminin bütün maliyeti budur.',
+        },
+        ui: {
+          statsLabel: 'İstatistikler',
+          fresh: 'Taze',
+          stale: 'Bayat',
+          estimatedRows: 'tahmini',
+          actualRows: 'gerçek',
+          planLabel: 'Plan',
+          estimate: 'tahmini',
+          offBy: 'sapma',
+        },
+      },
+
+      shape: {
+        title: 'Ne değişti, ne sadece değişmiş gibi görünüyor',
+        lede: 'EXPLAIN çıktısı her koşuda farklı. O farkın neredeyse hiçbiri bir şey ifade etmiyor.',
+        prose: [
+          {
+            html: 'Plan regresyonlarını CI\'da yakalamak için iki planı karşılaştırman gerekiyor ve metni karşılaştırmak umutsuz: maliyetler kayıyor, satır tahminleri kayıyor, literal\'ler her koşuda farklı ve paralel bir worker ya beliriyor ya belirmiyor. Metni karşılaştırırsan her build kırılır; hiçbir şeyi karşılaştırmazsan regresyon yayına çıkar.',
+          },
+          {
+            html: 'Bu yüzden plan bir <strong>şekle</strong> indirgeniyor: node tipleri, tablolar, index isimleri, join tipleri ve literal\'leri <code>?</code> ile maskelenmiş koşullar. Maliyetler, satır sayıları ve süreler şekle hiç girmiyor. Sorgudaki literal\'i değiştir, shape hash kıpırdamıyor — tüm aracın dayandığı özellik bu.',
+          },
+          {
+            html: 'İki kural daha var, çünkü alternatifi kimsenin güvenmediği bir guard. <code>Materialize</code>, <code>Memoize</code>, <code>Gather</code> ve <code>Gather Merge</code> tek çocukları olduğunda atılıyor; varlıkları sorguyu değil maliyet tahminlerini takip ettiği için. Ve aynı index üzerindeki <code>Index Scan</code> ile <code>Bitmap Heap Scan</code> eşdeğer ilan ediliyor, çünkü PostgreSQL ikisi arasında yalnızca satır sayısına bakarak seçim yapıyor.',
+          },
+          {
+            tone: 'accent',
+            html: 'Bütün bunlardan sağ çıkan şey gerçek bir regresyondur: düşmüş bir index, gerilemiş bir scan, artık index tarafından karşılanmayan bir predicate. Bunlar <code>crit</code> alır ve sıfırdan farklı bir exit döner. Bayat ya da eksik bir baseline de <code>--fail-on</code> ne derse desin fail eder — yapılamamış bir karşılaştırma, geçmiş sayılmaz.',
+          },
+        ],
+        predict: {
+          question:
+            'Aynı sorgu farklı literal\'lerle iki kez koşuyor ve ikincisinde paralel plan alıyor. Guard fail etmeli mi?',
+          options: [
+            'Evet — EXPLAIN çıktısı farklı',
+            'Hayır — maskelenmiş literal ve atılan Gather aynı şekli bırakır',
+            'Yalnızca maliyet yarıdan fazla değiştiyse',
+          ],
+          answer: 1,
+          explanation:
+            'İki fark da yapısal değil. Literal\'ler ? ile maskeleniyor ve tek çocuklu Gather şeffaf, yani iki koşu da aynı şekle ve aynı hash\'e normalize oluyor. Herhangi birinde fail etmek guard\'ı gürültüye çevirirdi; gürültülü guard da kapatılır.',
+        },
+        ui: {
+          literalLabel: 'Sorgudaki literal',
+          parallelLabel: 'Paralel plan',
+          dropIndex: 'Index\'i düşür',
+          restoreIndex: 'Index\'i geri getir',
+          baseline: 'Baseline',
+          current: 'Şu anki',
+          hashLabel: 'shape hash',
+          identical: 'Aynı şekil — raporlanacak bir şey yok.',
+          exitOk: 'exit 0',
+          exitFail: 'exit 1',
+          toolNote:
+            'Şekli commit\'lenmiş bir plans.lock.json\'a alıp her build\'de karşılaştırmak {tool} işi — düşmüş bir index\'te fail edip kaymış bir literal\'de etmemesinin sebebi de bu.',
         },
       },
     },

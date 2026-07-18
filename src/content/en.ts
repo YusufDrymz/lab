@@ -99,6 +99,20 @@ export const en: Content = {
         ],
         cta: 'Open the lab',
       },
+      {
+        path: '/plans',
+        topic: 'Query plans',
+        title: 'This query will fall over in production',
+        summary:
+          'Three milliseconds here, forty seconds there, and the SQL never changed. Four sections on what moves a plan, and on telling a real regression from a moved literal.',
+        topics: [
+          'An index a function made unusable',
+          'Where the sequential scan stops being fine',
+          'Nested loops and the estimate behind them',
+          'Plan shape: masking, transparent nodes, equivalence',
+        ],
+        cta: 'Open the lab',
+      },
     ],
   },
 
@@ -766,6 +780,198 @@ export const en: Content = {
           storeLabel: 'idempotency_keys',
           released: 'key released',
           empty: 'no rows',
+        },
+      },
+    },
+  },
+
+  plans: {
+    topic: 'Query plans',
+    title: 'This query will fall over in production',
+    intro: [
+      {
+        html: 'The query is 3 ms on your laptop and 40 seconds in production. The row count is the obvious suspect and it is rarely the whole answer — the same query against the same data can be fast or catastrophic depending on the <strong>plan</strong> PostgreSQL picks.',
+      },
+      {
+        html: 'That is what makes plan regressions unpleasant to review. The SQL did not change. Nobody touched the query in the pull request that broke it. An index was dropped, a column got wrapped in a function, a statistic went stale — and the plan quietly became a different plan.',
+      },
+      {
+        tone: 'warn',
+        html: '<strong>This is not PostgreSQL\'s planner.</strong> It does not read statistics, cost alternatives, or consider more than a handful of options. It is a model of <em>why</em> a plan changes: table size, whether an index is usable, and whether the row estimate is any good. The node names, normalisation rules, finding codes and severities are taken from <code>pg-plan-guard</code>, so what you learn here matches its real output.',
+      },
+    ],
+    nav: ['Lost index', 'Scale', 'Bad estimate', 'Plan shape'],
+
+    sections: {
+      lostIndex: {
+        title: 'The index that stopped being used',
+        lede: 'The index still exists. The query still runs. It simply cannot use it any more, and nothing says so.',
+        prose: [
+          {
+            html: 'A btree on <code>email</code> stores that column\'s values. Ask for <code>lower(email) = ?</code> and the index is useless: the planner would have to call <code>lower()</code> on every stored value to find out which rows match, which is the sequential scan it was trying to avoid.',
+          },
+          {
+            tone: 'danger',
+            html: 'Nothing warns you. The query is valid, the index is still there, the tests pass. On a development database with ten thousand rows the scan takes a millisecond and nobody notices. The bill arrives when the table does.',
+          },
+          {
+            html: 'The fix is an index on the same expression the query uses — <code>CREATE INDEX ... ON customers (lower(email))</code> — after which the planner recognises the predicate and goes back to a lookup. Toggle it and watch the node change.',
+          },
+          {
+            tone: 'accent',
+            html: 'This is exactly the class of change a plan guard exists for. Dropping an index is a one-line migration that touches no application code, so it reviews as harmless; the query it breaks may live in another repository entirely.',
+          },
+        ],
+        predict: {
+          question:
+            'A btree exists on email. The query filters on lower(email). What does the planner do?',
+          options: [
+            'Uses the index, then applies lower() to the results',
+            'Ignores the index and scans the table',
+            'Raises an error about the type mismatch',
+          ],
+          answer: 1,
+          explanation:
+            'The index holds email, not lower(email). There is no way to find matching entries without evaluating the function on every row — which is a sequential scan. The index is not wrong, it is simply not applicable.',
+        },
+        ui: {
+          predicateLabel: 'Predicate',
+          plain: 'created_at >= ?',
+          lower: 'lower(email) = ?',
+          addFunctional: 'Add the functional index',
+          dropFunctional: 'Drop the functional index',
+          planLabel: 'Plan',
+          estimate: 'estimated',
+          rowsLabel: 'rows',
+        },
+      },
+
+      scale: {
+        title: 'A thousand rows is not ten million',
+        lede: 'Sequential scans are not a mistake. They are the right plan, right up until they are the worst one.',
+        prose: [
+          {
+            html: 'Reading a whole table of a thousand rows costs almost nothing, and doing it sequentially is often faster than the random access an index implies. The planner knows this, which is why a small table gets a <code>Seq Scan</code> and nobody should be alarmed by it.',
+          },
+          {
+            html: 'Drag the table size up. The scan cost grows with every row, because it does the same work per row and there are more of them. The indexed lookup barely moves: it descends a tree whose depth grows logarithmically and reads only what matches.',
+          },
+          {
+            tone: 'warn',
+            html: 'So the plan that was correct in staging is a different plan in production, and the gap is not a factor of two — it is the difference between a page load and a timeout. Staging with a tenth of the data does not test the plan you will actually run.',
+          },
+          {
+            html: 'Above a few thousand matched rows this model switches to a <code>Bitmap Heap Scan</code>: collect the matching locations first, then read the heap in physical order rather than jumping around it. Same index, same access path — and the last section explains why a guard must not call that a regression.',
+          },
+        ],
+        predict: {
+          question:
+            'The same query runs against 1,000 rows and against 10,000,000. What happens to the sequential scan?',
+          options: [
+            'It stays roughly as fast, since disks read sequentially',
+            'It grows with the table, from milliseconds to a timeout',
+            'The planner would never choose it at either size',
+          ],
+          answer: 1,
+          explanation:
+            'A sequential scan does constant work per row, so its cost is linear in the table. At a thousand rows that is invisible; at ten million it is the incident. The indexed lookup grows logarithmically, which is why the two curves cross.',
+        },
+        ui: {
+          rowsLabel: 'rows in orders',
+          withIndex: 'With the index',
+          withoutIndex: 'Without it',
+          planLabel: 'Plan',
+          estimate: 'estimated',
+          slower: 'slower',
+        },
+      },
+
+      nestedLoop: {
+        title: 'The estimate that was off by 400×',
+        lede: 'A nested loop is the fastest join there is, when the outer side really is small. The planner finds out it was wrong at run time.',
+        prose: [
+          {
+            html: 'Joining two tables, PostgreSQL picks between a handful of strategies. A <strong>nested loop</strong> walks the outer rows and looks each one up on the inner side — unbeatable when the outer side is a few rows. A <strong>hash join</strong> builds a hash table once and probes it, which costs more to start and far less per row.',
+          },
+          {
+            html: 'The choice is made from an <em>estimate</em>. If the statistics say the filter matches 30 rows, the loop is obviously right. If it actually matches 12,000, the same plan performs twelve thousand inner lookups, and a query that took 4 ms takes half a minute.',
+          },
+          {
+            tone: 'danger',
+            html: 'None of this is a bug in PostgreSQL, and none of it appears in the query. Statistics go stale after a bulk load, after a backfill, after a table grows faster than autovacuum samples it. The plan is a rational conclusion from the wrong number.',
+          },
+          {
+            tone: 'accent',
+            html: 'A join-method change is a <code>warn</code>, not a <code>crit</code>: sometimes it is a legitimate response to data that genuinely changed. It is a finding you want to see in a diff and decide about, rather than one that blocks a deploy on its own.',
+          },
+        ],
+        predict: {
+          question:
+            'Statistics say a filter matches 30 rows; it really matches 12,000. The planner chose a nested loop. What happens?',
+          options: [
+            'It notices mid-query and switches to a hash join',
+            'It performs 12,000 inner lookups and takes far longer than planned',
+            'It returns only the 30 rows it planned for',
+          ],
+          answer: 1,
+          explanation:
+            'The plan is fixed before execution starts; nothing switches once it is running. The loop simply runs for every row it actually finds, which is the entire cost of a bad estimate.',
+        },
+        ui: {
+          statsLabel: 'Statistics',
+          fresh: 'Fresh',
+          stale: 'Stale',
+          estimatedRows: 'estimated',
+          actualRows: 'actual',
+          planLabel: 'Plan',
+          estimate: 'estimated',
+          offBy: 'off by',
+        },
+      },
+
+      shape: {
+        title: 'What changed, and what only looks like it changed',
+        lede: 'EXPLAIN output differs on every run. Almost none of that difference means anything.',
+        prose: [
+          {
+            html: 'To catch plan regressions in CI you have to compare two plans, and comparing the text is hopeless: costs move, row estimates move, literals differ per run, and a parallel worker appears or does not. Compare the text and every build fails; compare nothing and the regression ships.',
+          },
+          {
+            html: 'So the plan is reduced to a <strong>shape</strong>: node types, relations, index names, join types, and conditions with their literals masked to <code>?</code>. Costs, row counts and timings never enter it. Change the literal in the query and the shape hash does not move — that is the property the whole tool rests on.',
+          },
+          {
+            html: 'Two more rules exist because the alternative is a guard nobody trusts. <code>Materialize</code>, <code>Memoize</code>, <code>Gather</code> and <code>Gather Merge</code> are dropped when they have a single child, since their presence tracks cost estimates rather than the query. And an <code>Index Scan</code> and a <code>Bitmap Heap Scan</code> over the same index are declared equivalent, because PostgreSQL chooses between them on row counts alone.',
+          },
+          {
+            tone: 'accent',
+            html: 'What survives all of that is a real regression: an index dropped, a scan degraded, a predicate no longer served by the index. Those get a <code>crit</code> and a non-zero exit. A baseline that is stale or missing fails too, whatever <code>--fail-on</code> says — a comparison that could not be made is not a pass.',
+          },
+        ],
+        predict: {
+          question:
+            'The same query runs twice with different literals, and the second run gets a parallel plan. Should the guard fail?',
+          options: [
+            'Yes — the EXPLAIN output is different',
+            'No — masked literals and a dropped Gather leave the same shape',
+            'Only if the cost changed by more than half',
+          ],
+          answer: 1,
+          explanation:
+            'Neither difference is structural. Literals are masked to ? and a single-child Gather is transparent, so both runs normalise to the same shape and the same hash. Failing on either would make the guard noise, and a noisy guard gets switched off.',
+        },
+        ui: {
+          literalLabel: 'Literal in the query',
+          parallelLabel: 'Parallel plan',
+          dropIndex: 'Drop the index',
+          restoreIndex: 'Restore the index',
+          baseline: 'Baseline',
+          current: 'Current',
+          hashLabel: 'shape hash',
+          identical: 'Same shape — nothing to report.',
+          exitOk: 'exit 0',
+          exitFail: 'exit 1',
+          toolNote:
+            'Snapshotting the shape into a committed plans.lock.json and comparing it on every build is what {tool} does — which is how it fails on a dropped index without failing on a moved literal.',
         },
       },
     },

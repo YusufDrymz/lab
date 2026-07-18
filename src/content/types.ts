@@ -87,6 +87,13 @@ export type IdempotencyContent = LabContent<{
   fingerprint: SectionContent
 }>
 
+export type PlansContent = LabContent<{
+  lostIndex: SectionContent
+  scale: SectionContent
+  nestedLoop: SectionContent
+  shape: SectionContent
+}>
+
 export type HomeContent = {
   title: string
   tagline: string
@@ -115,6 +122,7 @@ export const REPOS = {
   kafkaDlq: 'https://github.com/YusufDrymz/kafka-dlq',
   hookkeep: 'https://github.com/YusufDrymz/hookkeep',
   goIdempotent: 'https://github.com/YusufDrymz/go-idempotent',
+  pgPlanGuard: 'https://github.com/YusufDrymz/pg-plan-guard',
   site: 'https://yusufdariyemez.com',
 } as const
 
@@ -150,4 +158,5 @@ export type Content = {
   kafka: KafkaContent
   hookkeep: HookkeepContent
   idempotency: IdempotencyContent
+  plans: PlansContent
 }
