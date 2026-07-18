@@ -61,9 +61,34 @@ describe('partitionForKey', () => {
     expect(moved.length).toBeGreaterThan(0)
   })
 
-  it('spreads the customer pool over more than one partition', () => {
-    const used = new Set(CUSTOMERS.map((key) => partitionForKey(key, 3)))
-    expect(used.size).toBeGreaterThan(1)
+  it('spreads the customer pool evenly enough to be worth drawing', () => {
+    // Not a property of murmur2 — a property of the ids we picked. An unlucky
+    // block piles every customer onto one partition and the diagrams in
+    // sections 1 to 4 stop demonstrating anything, so this is a real
+    // regression guard rather than a tautology.
+    for (const count of [2, 3, 4]) {
+      const counts = new Array<number>(count).fill(0)
+      for (const key of CUSTOMERS) counts[partitionForKey(key, count)]!++
+
+      // Every partition gets something, and none carries more than 1.5× its
+      // fair share. Perfect balance is not achievable for a fixed key set, but
+      // this is close enough that the diagrams read correctly.
+      expect(counts.every((n) => n > 0)).toBe(true)
+      expect(Math.max(...counts)).toBeLessThanOrEqual(
+        Math.ceil((CUSTOMERS.length / count) * 1.5),
+      )
+    }
+  })
+
+  it('distributes unrelated keys uniformly', () => {
+    // Guards the murmur2 port itself: a broken hash would show up here as a
+    // lopsided split long before anyone noticed it in the UI.
+    const counts = [0, 0, 0]
+    for (let i = 0; i < 3000; i++) counts[partitionForKey(`user-${i}-${i * 7}`, 3)]!++
+    for (const n of counts) {
+      expect(n).toBeGreaterThan(850)
+      expect(n).toBeLessThan(1150)
+    }
   })
 
   it('rejects a non-positive partition count', () => {

@@ -35,15 +35,23 @@ export const GROUPS = {
  * makes skew visible: with 200 customers everything looks evenly balanced and
  * the reader learns nothing.
  */
+/*
+ * These specific ids are chosen, not arbitrary. murmur2 spreads random keys
+ * evenly, but any given handful of similar keys can land badly — the first
+ * block we tried (cust-1041..1048) put seven of eight customers on partition 0,
+ * which made the diagram look broken and left the other partitions empty for
+ * every later section. This block spreads 3/2/3 over three partitions and stays
+ * reasonable at two, four and six. `partition.test.ts` locks that in.
+ */
 export const CUSTOMERS = [
-  'cust-1041',
-  'cust-1042',
-  'cust-1043',
-  'cust-1044',
-  'cust-1045',
-  'cust-1046',
-  'cust-1047',
-  'cust-1048',
+  'cust-1010',
+  'cust-1011',
+  'cust-1012',
+  'cust-1013',
+  'cust-1014',
+  'cust-1015',
+  'cust-1016',
+  'cust-1017',
 ] as const
 
 /**

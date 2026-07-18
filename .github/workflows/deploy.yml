@@ -1,0 +1,64 @@
+name: deploy
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+concurrency:
+  group: production
+  cancel-in-progress: false
+
+# Host, user and paths live in secrets rather than in this file. The repository
+# is public and the origin sits behind Cloudflare — publishing the origin address
+# here would let anyone bypass the proxy and reach the server directly, which
+# would affect every site on that box, not just this one.
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+
+      - name: ship
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          SERVER: ${{ secrets.DEPLOY_HOST }}
+          APP_DIR: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          install -m 600 /dev/null key
+          printf '%s\n' "$SSH_KEY" > key
+
+          release="$APP_DIR/releases/${GITHUB_SHA}"
+          tar -czf dist.tar.gz -C dist .
+
+          scp -i key -o StrictHostKeyChecking=accept-new dist.tar.gz "$SERVER:/tmp/lab-dist.tar.gz"
+          ssh -i key -o StrictHostKeyChecking=accept-new "$SERVER" bash -euo pipefail <<EOF
+            mkdir -p "$release"
+            tar -xzf /tmp/lab-dist.tar.gz -C "$release"
+            rm /tmp/lab-dist.tar.gz
+
+            # Atomic swap: the symlink flips in one syscall, so a request never
+            # sees a half-extracted release. Rollback is pointing it back.
+            ln -sfn "$release" "$APP_DIR/current.new"
+            mv -T "$APP_DIR/current.new" "$APP_DIR/current"
+
+            # Keep the last five releases so a rollback target still exists.
+            ls -1dt "$APP_DIR"/releases/*/ | tail -n +6 | xargs -r rm -rf
+          EOF
+
+      - name: verify
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          SERVER: ${{ secrets.DEPLOY_HOST }}
+          APP_DIR: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          ssh -i key -o StrictHostKeyChecking=accept-new "$SERVER" \
+            "test -f \"$APP_DIR/current/index.html\" && echo 'release is live'"
