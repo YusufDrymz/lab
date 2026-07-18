@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useContent } from '../content'
 
 /**
  * The narration channel. Everything the reader is meant to notice is written
@@ -14,6 +15,8 @@ const props = withDefaults(
   }>(),
   { limit: 8 },
 )
+
+const content = useContent()
 
 const visible = computed(() => {
   const start = Math.max(0, props.lines.length - props.limit)
@@ -39,7 +42,7 @@ const toneFor = (kind: string): string => {
     class="h-44 overflow-y-auto rounded-lg border border-ink-800 bg-ink-950 p-3 font-mono text-xs leading-relaxed"
     aria-live="polite"
   >
-    <p v-if="visible.length === 0" class="text-ink-600">nothing has happened yet</p>
+    <p v-if="visible.length === 0" class="text-ink-600">{{ content.chrome.emptyLog }}</p>
     <p v-for="line in visible" :key="line.key" :class="toneFor(line.kind)">
       {{ line.text }}
     </p>

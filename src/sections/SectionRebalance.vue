@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import SectionShell from '../components/SectionShell.vue'
 import SimControls from '../components/SimControls.vue'
+import ProseBlocks from '../components/ProseBlocks.vue'
 import PredictPrompt from '../components/PredictPrompt.vue'
 import ClusterView from '../components/ClusterView.vue'
 import EventLog from '../components/EventLog.vue'
@@ -15,6 +16,9 @@ import {
   type RebalanceStrategy,
 } from '../core/cluster'
 import { useTicker } from '../composables/useTicker'
+import { useContent } from '../content'
+
+const c = computed(() => useContent().value.kafka.sections.rebalance)
 
 const strategy = ref<RebalanceStrategy>('eager')
 
@@ -49,47 +53,16 @@ const add = (): void => {
     @mounted="sim.mount"
     id="rebalance"
     :number="3"
-    title="The pause nobody budgets for"
-    lede="Membership changes are routine. What they cost you is not, and it is the single most common source of unexplained latency spikes."
+    :title="c.title"
+    :lede="c.lede"
   >
     <template #prose>
-      <p>
-        Whenever a consumer joins or leaves, the group has to agree on who owns what.
-        That negotiation is a rebalance, and with the classic
-        <strong>eager</strong> protocol it is stop-the-world: every consumer gives up
-        every partition, including the work it was halfway through, and the entire group
-        processes nothing until the new assignment is settled.
-      </p>
-      <p>
-        Producers do not participate in any of this. They keep writing at full rate
-        through the whole pause. Watch the lag counters while the group is stalled —
-        that spike is not a slow consumer, it is a consumer group that briefly stopped
-        existing.
-      </p>
-      <p>
-        <strong>Cooperative sticky</strong> rebalancing fixes most of it. Instead of
-        revoking everything, it computes the new assignment first and only takes away
-        the partitions that actually change hands. Consumers keep working on what they
-        already own, so the stall shrinks to almost nothing.
-      </p>
-      <p class="rounded-md border-l-2 border-danger-500 pl-4 text-ink-300">
-        The failure mode worth recognising: if processing one batch takes longer than
-        <code class="font-mono">max.poll.interval.ms</code>, the broker decides the
-        consumer is dead and kicks it out. That triggers a rebalance, which stalls
-        everyone, which makes the next batch take even longer — and now you have a
-        rebalance loop that looks like the cluster is broken when the real problem is a
-        slow handler.
-      </p>
-
+      <ProseBlocks :blocks="c.prose" />
       <PredictPrompt
-        question="An eager group is stalled in a rebalance for 40 ticks while the producer keeps writing. What does the lag graph do?"
-        :options="[
-          'Stays flat — no consumers means no lag change',
-          'Climbs, then drops sharply once the group settles',
-          'Drops, because nothing is being read',
-        ]"
-        :answer="1"
-        explanation="Lag is records written minus records committed. Writes continue and commits stop, so lag climbs for the whole stall and only comes back down once the group resumes and works through the backlog."
+        :question="c.predict.question"
+        :options="c.predict.options"
+        :answer="c.predict.answer"
+        :explanation="c.predict.explanation"
       />
     </template>
 
@@ -117,7 +90,7 @@ const add = (): void => {
           "
           @click="strategy = option"
         >
-          {{ option === 'eager' ? 'Eager (stop the world)' : 'Cooperative sticky' }}
+          {{ option === 'eager' ? c.ui.eager : c.ui.cooperative }}
         </button>
 
         <button
@@ -125,7 +98,7 @@ const add = (): void => {
           class="ml-auto rounded-md border border-ink-600 px-3 py-1.5 text-sm text-ink-200 transition hover:border-ink-400"
           @click="add"
         >
-          Add a consumer
+          {{ c.ui.addConsumer }}
         </button>
       </div>
 
@@ -137,14 +110,9 @@ const add = (): void => {
             : 'border-ink-800 bg-ink-900/40 text-ink-400'
         "
       >
-        <span>
-          <template v-if="stalled">
-            Group stalled — rebalancing, nothing is being processed
-          </template>
-          <template v-else>Group stable</template>
-        </span>
+        <span>{{ stalled ? c.ui.stalled : c.ui.stable }}</span>
         <span class="font-mono tabular-nums">
-          lag {{ lag }} · {{ sim.state.value.group.rebalanceCount }} rebalance(s)
+          {{ c.ui.lag }} {{ lag }} · {{ sim.state.value.group.rebalanceCount }} {{ c.ui.rebalances }}
         </span>
       </div>
 

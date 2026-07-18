@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useContent } from '../content'
 
 /**
  * Ask before showing.
@@ -16,6 +17,7 @@ defineProps<{
   explanation: string
 }>()
 
+const content = useContent()
 const picked = ref<number | null>(null)
 </script>
 
@@ -47,7 +49,7 @@ const picked = ref<number | null>(null)
 
     <p v-if="picked !== null" class="mt-3 text-sm text-ink-200">
       <span :class="picked === answer ? 'text-healthy-500' : 'text-warn-500'">
-        {{ picked === answer ? 'Right.' : 'Not quite.' }}
+        {{ picked === answer ? content.chrome.predictRight : content.chrome.predictWrong }}
       </span>
       {{ ' ' }}{{ explanation }}
     </p>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, shallowRef } from 'vue'
 import SectionShell from '../components/SectionShell.vue'
+import ProseBlocks from '../components/ProseBlocks.vue'
 import PredictPrompt from '../components/PredictPrompt.vue'
 import EventLog from '../components/EventLog.vue'
 import {
@@ -13,9 +14,13 @@ import {
 } from '../core/writepath'
 import { makeOrder } from '../core/scenario'
 import { createRng } from '../core/prng'
+import { useContent } from '../content'
+
+const c = computed(() => useContent().value.kafka.sections.writePath)
 
 const strategy = ref<WriteStrategy>('dual-write')
 const crashAt = ref<CrashPoint>('after-db-commit')
+
 // shallowRef, not ref: the core clones state with structuredClone, and a deeply
 // reactive ref would hand it a Proxy, which structuredClone refuses to clone.
 // The state is replaced wholesale on every transition anyway, so deep
@@ -48,70 +53,37 @@ const relay = (): void => {
 }
 
 const verdict = computed(() => checkConsistency(state.value))
+const pendingOutbox = computed(() => state.value.outbox.filter((r) => !r.published).length)
 
-const STRATEGIES: { value: WriteStrategy; label: string }[] = [
-  { value: 'dual-write', label: 'Dual write' },
-  { value: 'outbox', label: 'Outbox' },
-  { value: 'cdc', label: 'CDC' },
-]
+const strategies = computed<{ value: WriteStrategy; label: string }[]>(() => [
+  { value: 'dual-write', label: c.value.ui.dualWrite! },
+  { value: 'outbox', label: c.value.ui.outbox! },
+  { value: 'cdc', label: c.value.ui.cdc! },
+])
 
-const CRASHES: { value: CrashPoint; label: string }[] = [
-  { value: 'none', label: 'No crash' },
-  { value: 'after-db-commit', label: 'Crash after COMMIT' },
-  { value: 'after-publish', label: 'Crash after publish' },
-]
+const crashes = computed<{ value: CrashPoint; label: string }[]>(() => [
+  { value: 'none', label: c.value.ui.noCrash! },
+  { value: 'after-db-commit', label: c.value.ui.crashAfterCommit! },
+  { value: 'after-publish', label: c.value.ui.crashAfterPublish! },
+])
 </script>
 
 <template>
-  <SectionShell
-    id="write-path"
-    :number="0"
-    title="Where does the data come from?"
-    lede="Every other explanation of Kafka starts with a producer that already exists. The most expensive mistake happens earlier than that."
-  >
+  <SectionShell id="write-path" :number="0" :title="c.title" :lede="c.lede">
     <template #prose>
-      <p>
-        Kafka is not a database and not a cache. It is an append-only log that your
-        application <em>writes to</em> — which means that on every order you take, two
-        different systems have to be updated: the database that owns the truth, and the
-        log that tells everyone else about it.
-      </p>
-      <p>
-        Those two writes are not atomic. There is no transaction that spans Postgres and
-        a broker. Crash in the gap and you get one of two broken outcomes, and which one
-        you get depends only on the order you happened to write the code in.
-      </p>
-      <p class="rounded-md border-l-2 border-accent-500 pl-4 text-ink-300">
-        Worth saying plainly, because it is the most common confusion: <strong>Redis is
-        not the source of this event log.</strong> Redis is a cache, a lock, a
-        short-lived queue. Putting it on this path buys you another system to lose
-        writes in, not durability.
-      </p>
-      <p>
-        The fix is not to try harder at the two writes. It is to stop having two. With
-        the <strong>outbox</strong> pattern the order row and the event row are written
-        in a single transaction, and a separate relay drains the outbox afterwards —
-        atomicity becomes the database's problem, which is the one system that is
-        actually good at it. <strong>CDC</strong> goes further: no outbox table, the
-        relay tails Postgres' WAL and the application never learns that Kafka exists.
-      </p>
-
+      <ProseBlocks :blocks="c.prose" />
       <PredictPrompt
-        question="Dual write: the app commits the order, then dies before publishing. What does the rest of the system see?"
-        :options="[
-          'Nothing — the order rolls back too',
-          'An order that exists but was never announced',
-          'The event arrives late, once the app restarts',
-        ]"
-        :answer="1"
-        explanation="The COMMIT already happened, so the order is real and permanent. The publish never did, and nothing in the design remembers that it was supposed to. Payment, inventory and notification will never hear about this order."
+        :question="c.predict.question"
+        :options="c.predict.options"
+        :answer="c.predict.answer"
+        :explanation="c.predict.explanation"
       />
     </template>
 
     <template #sim>
       <div class="flex flex-wrap gap-2">
         <button
-          v-for="option in STRATEGIES"
+          v-for="option in strategies"
           :key="option.value"
           type="button"
           class="rounded-md border px-3 py-1.5 text-sm transition"
@@ -128,7 +100,7 @@ const CRASHES: { value: CrashPoint; label: string }[] = [
 
       <div class="flex flex-wrap gap-2">
         <button
-          v-for="option in CRASHES"
+          v-for="option in crashes"
           :key="option.value"
           type="button"
           class="rounded-md border px-3 py-1.5 text-xs transition"
@@ -145,17 +117,20 @@ const CRASHES: { value: CrashPoint; label: string }[] = [
 
       <div class="grid grid-cols-3 gap-3">
         <div class="rounded-lg border border-ink-800 bg-ink-900/50 p-3">
-          <p class="mb-2 font-mono text-[11px] text-ink-400">orders table</p>
+          <p class="mb-2 font-mono text-[11px] text-ink-400">{{ c.ui.ordersTable }}</p>
           <p class="font-mono text-2xl tabular-nums text-ink-50">{{ state.db.length }}</p>
         </div>
         <div class="rounded-lg border border-ink-800 bg-ink-900/50 p-3">
-          <p class="mb-2 font-mono text-[11px] text-ink-400">outbox</p>
-          <p class="font-mono text-2xl tabular-nums" :class="state.outbox.filter((r) => !r.published).length > 0 ? 'text-warn-500' : 'text-ink-50'">
-            {{ state.outbox.filter((r) => !r.published).length }}
+          <p class="mb-2 font-mono text-[11px] text-ink-400">{{ c.ui.outboxLabel }}</p>
+          <p
+            class="font-mono text-2xl tabular-nums"
+            :class="pendingOutbox > 0 ? 'text-warn-500' : 'text-ink-50'"
+          >
+            {{ pendingOutbox }}
           </p>
         </div>
         <div class="rounded-lg border border-ink-800 bg-ink-900/50 p-3">
-          <p class="mb-2 font-mono text-[11px] text-ink-400">orders topic</p>
+          <p class="mb-2 font-mono text-[11px] text-ink-400">{{ c.ui.ordersTopic }}</p>
           <p class="font-mono text-2xl tabular-nums text-accent-400">{{ state.topic.length }}</p>
         </div>
       </div>
@@ -168,15 +143,13 @@ const CRASHES: { value: CrashPoint; label: string }[] = [
             : 'border-danger-500/40 bg-danger-500/5 text-danger-500'
         "
       >
-        <template v-if="verdict.consistent">Database and topic agree.</template>
+        <template v-if="verdict.consistent">{{ c.ui.consistent }}</template>
         <template v-else>
           <span v-if="verdict.lost.length">
-            {{ verdict.lost.length }} order(s) in the database that nobody was told about:
-            {{ verdict.lost.join(', ') }}.
+            {{ verdict.lost.length }} {{ c.ui.lost }} {{ verdict.lost.join(', ') }}.
           </span>
           <span v-if="verdict.phantom.length">
-            {{ verdict.phantom.length }} event(s) for orders that do not exist:
-            {{ verdict.phantom.join(', ') }}.
+            {{ verdict.phantom.length }} {{ c.ui.phantom }} {{ verdict.phantom.join(', ') }}.
           </span>
         </template>
       </div>
@@ -188,21 +161,21 @@ const CRASHES: { value: CrashPoint; label: string }[] = [
           :disabled="state.appCrashed"
           @click="sendOrder"
         >
-          Place an order
+          {{ c.ui.placeOrder }}
         </button>
         <button
           type="button"
           class="rounded-md border border-ink-600 px-3 py-1.5 text-sm text-ink-200 transition hover:border-ink-400"
           @click="relay"
         >
-          Run the relay
+          {{ c.ui.runRelay }}
         </button>
         <button
           type="button"
           class="rounded-md border border-ink-700 px-3 py-1.5 text-sm text-ink-400 transition hover:border-ink-500"
           @click="reset"
         >
-          Reset
+          {{ c.ui.reset }}
         </button>
       </div>
 
