@@ -1,7 +1,20 @@
 import { describe, expect, it } from 'vitest'
 import { en } from '../en'
 import { tr } from '../tr'
-import type { Content } from '../types'
+import type { SectionContent } from '../types'
+
+/**
+ * Every lab page, so adding one cannot quietly opt out of these checks. The
+ * sections are compared as plain records; the typed shapes differ per lab and
+ * nothing here cares which keys they are, only that both locales agree.
+ */
+const LABS = ['kafka', 'hookkeep'] as const
+
+const sectionsOf = (
+  content: typeof en | typeof tr,
+  lab: (typeof LABS)[number],
+): Record<string, SectionContent> =>
+  content[lab].sections as unknown as Record<string, SectionContent>
 
 /**
  * Structural parity between the two locales.
@@ -63,12 +76,14 @@ describe('locale parity', () => {
   it('keeps the same correct answer for every prediction', () => {
     // A translator reordering options would silently make the right answer
     // wrong, and the reader would be told they were mistaken when they were not.
-    const sections = (c: Content) => Object.entries(c.kafka.sections)
-    for (const [key, section] of sections(en)) {
-      const other = section
-      const trSection = (tr.kafka.sections as Record<string, typeof other>)[key]!
-      expect(trSection.predict.answer, `${key}: answer index moved`).toBe(section.predict.answer)
-      expect(trSection.predict.options).toHaveLength(section.predict.options.length)
+    for (const lab of LABS) {
+      for (const [key, section] of Object.entries(sectionsOf(en, lab))) {
+        const trSection = sectionsOf(tr, lab)[key]!
+        expect(trSection.predict.answer, `${lab}.${key}: answer index moved`).toBe(
+          section.predict.answer,
+        )
+        expect(trSection.predict.options).toHaveLength(section.predict.options.length)
+      }
     }
   })
 
@@ -77,28 +92,45 @@ describe('locale parity', () => {
     // translating one would quietly invent a topic that does not exist.
     const codeSpans = (html: string) => [...html.matchAll(/<code>(.*?)<\/code>/g)].map((m) => m[1])
 
-    for (const [key, section] of Object.entries(en.kafka.sections)) {
-      const trSection = (tr.kafka.sections as Record<string, typeof section>)[key]!
-      expect(trSection.prose, `${key}: block count`).toHaveLength(section.prose.length)
+    for (const lab of LABS) {
+      for (const [key, section] of Object.entries(sectionsOf(en, lab))) {
+        const trSection = sectionsOf(tr, lab)[key]!
+        expect(trSection.prose, `${lab}.${key}: block count`).toHaveLength(section.prose.length)
 
-      section.prose.forEach((block, i) => {
-        const trBlock = trSection.prose[i]!
-        expect(trBlock.tone, `${key} block ${i}: tone`).toBe(block.tone)
-        expect(codeSpans(trBlock.html), `${key} block ${i}: code spans`).toEqual(
-          codeSpans(block.html),
-        )
-      })
+        section.prose.forEach((block, i) => {
+          const trBlock = trSection.prose[i]!
+          expect(trBlock.tone, `${lab}.${key} block ${i}: tone`).toBe(block.tone)
+          expect(codeSpans(trBlock.html), `${lab}.${key} block ${i}: code spans`).toEqual(
+            codeSpans(block.html),
+          )
+        })
+      }
     }
   })
 
   it('keeps the {tool} placeholder that carries the repository link', () => {
-    expect(en.kafka.sections.deadLetters.ui.toolNote).toContain('{tool}')
-    expect(tr.kafka.sections.deadLetters.ui.toolNote).toContain('{tool}')
+    // The label is split around the placeholder to wrap a link, so losing it in
+    // translation would drop the link entirely rather than fail loudly.
+    for (const lab of LABS) {
+      for (const [key, section] of Object.entries(sectionsOf(en, lab))) {
+        if (!section.ui.toolNote) continue
+        expect(section.ui.toolNote, `en ${lab}.${key}`).toContain('{tool}')
+        expect(sectionsOf(tr, lab)[key]!.ui.toolNote, `tr ${lab}.${key}`).toContain('{tool}')
+      }
+    }
   })
 
   it('lists one nav label per section', () => {
-    const count = Object.keys(en.kafka.sections).length
-    expect(en.kafka.nav).toHaveLength(count)
-    expect(tr.kafka.nav).toHaveLength(count)
+    for (const lab of LABS) {
+      const count = Object.keys(sectionsOf(en, lab)).length
+      expect(en[lab].nav, `en ${lab}`).toHaveLength(count)
+      expect(tr[lab].nav, `tr ${lab}`).toHaveLength(count)
+    }
+  })
+
+  it('points every lab card at a route that exists', () => {
+    const paths = en.home.labs.map((lab) => lab.path)
+    expect(paths).toEqual(tr.home.labs.map((lab) => lab.path))
+    expect(paths).toEqual(LABS.map((lab) => `/${lab}`))
   })
 })

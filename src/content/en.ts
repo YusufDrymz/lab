@@ -53,20 +53,36 @@ export const en: Content = {
       },
     ],
     labsHeading: 'Labs',
-    kafkaCard: {
-      title: 'Kafka, by behaviour',
-      summary:
-        'Six sections on what Kafka actually does under failure — starting before the first byte reaches a broker, with the two writes that are not atomic.',
-      topics: [
-        'Dual writes, outbox and CDC',
-        'Key routing and hot partitions',
-        'Consumer groups and the parallelism ceiling',
-        'Rebalance stalls',
-        'At-most-once vs at-least-once',
-        'Dead letters and the replay that loops',
-      ],
-      cta: 'Open the lab',
-    },
+    labs: [
+      {
+        path: '/kafka',
+        title: 'Kafka, by behaviour',
+        summary:
+          'Six sections on what Kafka actually does under failure — starting before the first byte reaches a broker, with the two writes that are not atomic.',
+        topics: [
+          'Dual writes, outbox and CDC',
+          'Key routing and hot partitions',
+          'Consumer groups and the parallelism ceiling',
+          'Rebalance stalls',
+          'At-most-once vs at-least-once',
+          'Dead letters and the replay that loops',
+        ],
+        cta: 'Open the lab',
+      },
+      {
+        path: '/hookkeep',
+        title: 'Webhooks, and where they go',
+        summary:
+          'The provider says it delivered the event. Your database has never heard of it. Four sections on the gap between those two facts, and on why the fix is boring: write it down first.',
+        topics: [
+          'Persist-first vs forward-first',
+          'Exponential backoff and why it needs jitter',
+          'Dead letters you can still replay',
+          'Rejected signatures: evidence, not work',
+        ],
+        cta: 'Open the lab',
+      },
+    ],
   },
 
   kafka: {
@@ -335,6 +351,203 @@ export const en: Content = {
           deployFix: 'Deploy the fix',
           toolNote:
             'Doing this on a real cluster is what {tool} is for — indexed dead letters, filtered replay and a dry run before you touch production.',
+        },
+      },
+    },
+  },
+
+  hookkeep: {
+    title: 'Webhooks, and where they go',
+    intro: [
+      {
+        html: 'A provider sends you an event and expects a quick 2xx. Your endpoint is slow, or restarting, or briefly down. The provider retries a few times, gives up, and marks the delivery as failed — or worse, as succeeded. Days later somebody notices a payment that never landed.',
+      },
+      {
+        html: 'The interesting question is not why the endpoint was down. Endpoints go down. The question is what you have left afterwards, and that is decided by one line of ordering you wrote months earlier: whether the event was written to your own storage before or after you told the provider it was fine.',
+      },
+      {
+        tone: 'muted',
+        html: 'This runs entirely in your browser. There is no server and no network call: it is a deterministic model of <code>hookkeep</code>, so the same seed always replays the same incident. The status names are taken from the real schema.',
+      },
+    ],
+    nav: ['Persist first', 'Retry', 'Replay', 'Signatures'],
+
+    sections: {
+      persistFirst: {
+        title: 'Where did the webhook go?',
+        lede: 'The provider dashboard says 200. Your database has never heard of the event. Both are telling the truth.',
+        prose: [
+          {
+            html: 'A webhook receiver has two jobs, and the order it does them in is the entire design. It has to answer the provider, and it has to make the event durable. Do them in the wrong order and you have promised something you cannot keep.',
+          },
+          {
+            html: '<strong>Forward-first</strong> looks natural: take the event, hand it to whatever needs to process it, write it down once that works. It even feels efficient — why store something you are about to finish with anyway? The problem is the word <em>afterwards</em>. Everything between the ack and the write exists only in memory, and a deploy does not wait for your memory.',
+          },
+          {
+            tone: 'danger',
+            html: 'When the process dies in that gap, the event is not delayed — it is <strong>gone</strong>. The provider already got its 2xx, so it has stopped retrying. Nothing will ever send it again. This is the failure that gets blamed on the provider, and it is not the provider.',
+          },
+          {
+            html: '<strong>Persist-first</strong> is the boring alternative and the one <code>hookkeep</code> takes: write the raw body and headers to Postgres, and only then answer. If that write fails you return a 500 — never a fake 200 — and the provider retries, which is exactly what its retry logic is for.',
+          },
+          {
+            tone: 'accent',
+            html: 'The counter to watch is <strong>at risk</strong>: events the provider believes are delivered but that exist nowhere on disk. In persist-first it is structurally zero. That is the whole claim.',
+          },
+        ],
+        predict: {
+          question:
+            'In forward-first mode, the process restarts while an event is being forwarded. What does the provider do?',
+          options: [
+            'Retries it, because the delivery never completed',
+            'Nothing — it already got a 200 and considers the event delivered',
+            'Sends it to a dead-letter endpoint',
+          ],
+          answer: 1,
+          explanation:
+            'The ack was sent up front, so as far as the provider is concerned the job is finished. Its retry machinery — the thing that would have saved you — was switched off by your own 200.',
+        },
+        ui: {
+          modeLabel: 'Write order',
+          persistFirst: 'Persist first',
+          forwardFirst: 'Forward first',
+          crash: 'Restart the process',
+          stored: 'On disk',
+          delivered: 'Delivered',
+          atRisk: 'At risk',
+          lost: 'Lost for good',
+          providerView: 'What the provider thinks',
+          ourView: 'What you actually have',
+        },
+      },
+
+      retryBackoff: {
+        title: 'The endpoint is down. Now what?',
+        lede: 'Retrying is easy. Retrying without turning your recovery into a second outage is the part people skip.',
+        prose: [
+          {
+            html: 'Take the endpoint down and watch the attempts. The interval does not stay flat — it doubles: <code>base * 2^(attempt-1)</code>, capped so it never grows into next week. A downstream that is struggling gets hit less often, not more, which is the opposite of what a naive retry loop does.',
+          },
+          {
+            html: 'The part that looks like decoration is the <strong>jitter</strong>, ±20% on every interval. Without it, every delivery that failed during the same outage comes back at the same instant. The endpoint recovers, receives the entire backlog as one spike, and falls over again — and now the whole fleet is synchronised, so it happens on every retry round.',
+          },
+          {
+            html: 'After the configured number of attempts the delivery is marked <code>dead</code>. That word causes trouble, so: dead does not mean discarded. The row is still there, the body is still there, and section three is about getting it back.',
+          },
+          {
+            tone: 'warn',
+            html: 'The genuinely nasty state is not <code>down</code> — it is <code>slow</code>. A timeout tells you nothing about whether the endpoint processed the request before it stopped answering. Retrying might be a duplicate; not retrying might be a loss. This is why the event id travels with every delivery: the receiver dedupes, and the sender stops having to guess.',
+          },
+        ],
+        predict: {
+          question: 'Why add random jitter to a backoff that is already exponential?',
+          options: [
+            'To make the retries harder to predict for an attacker',
+            'So deliveries that failed together do not retry together and re-break the endpoint',
+            'To spread load evenly across worker processes',
+          ],
+          answer: 1,
+          explanation:
+            'A shared outage synchronises every failed delivery onto the same schedule. Jitter is what breaks that lockstep, so recovery arrives as a spread rather than a thundering herd.',
+        },
+        ui: {
+          endpointLabel: 'Endpoint',
+          up: 'Up',
+          slow: 'Slow',
+          down: 'Down',
+          delivered: 'Delivered',
+          retrying: 'Retrying',
+          dead: 'Dead',
+          attempts: 'attempts',
+          nextIn: 'next attempt in',
+          waiting: 'waiting',
+        },
+      },
+
+      replay: {
+        title: 'Replay: the part only you can do',
+        lede: 'The provider stopped retrying days ago. The event still exists — because the copy is yours.',
+        prose: [
+          {
+            html: 'Bring the endpoint back up and replay the dead deliveries. The gap closes. Nothing about that is remarkable, and that is precisely the point: recovery is uneventful when the data never left.',
+          },
+          {
+            html: 'Compare it with the alternative. If the event was never persisted, there is no replay to run — the provider has moved on, its retry window closed, and the only path left is a support ticket asking a company to resend something from last Tuesday. Persisting first is what converts an incident into a chore.',
+          },
+          {
+            tone: 'warn',
+            html: 'Replay is at-least-once and unapologetic about it: it will re-send events that already succeeded, because it cannot know what your consumer did with them. Every delivery carries the event id in a header so the receiver can dedupe. If your handler is not idempotent, replay is where you find out.',
+          },
+          {
+            tone: 'accent',
+            html: 'Dry-run before you fire. A replay that runs while the endpoint is still broken does not fix anything — it just walks the same deliveries back into <code>dead</code>, and buries the original timestamps under a fresh round of failures.',
+          },
+        ],
+        predict: {
+          question: 'The endpoint is still down and you replay the dead deliveries anyway. Then?',
+          options: [
+            'They queue up and deliver once the endpoint recovers',
+            'They burn through their attempts again and land back in dead',
+            'Replay refuses to run while the endpoint is unhealthy',
+          ],
+          answer: 1,
+          explanation:
+            'Replay re-enqueues; it does not wait for the world to be better. Nothing was fixed, so the same attempts fail the same way. Fix first, replay second — that ordering is the whole lesson.',
+        },
+        ui: {
+          replay: 'Replay dead deliveries',
+          bringUp: 'Bring the endpoint up',
+          dryRunPrefix: 'Dry run:',
+          dryRunGood: 'would be replayed and should now succeed.',
+          dryRunBad: 'would be replayed — the endpoint is still unhealthy, so they will die again.',
+          dead: 'Dead',
+          delivered: 'Delivered',
+          replayed: 'via replay',
+          toolNote:
+            'Running this against real traffic is what {tool} is for — every event stored with its raw body, replay by id or by time range, and a dry run before you touch production.',
+        },
+      },
+
+      signature: {
+        title: 'A signature that does not verify',
+        lede: 'Someone posts to your webhook URL. It is public, so of course they can. What should be stored, and what should be run?',
+        prose: [
+          {
+            html: 'The ingest endpoint has to be reachable by the provider, which means it is reachable by everybody. Authentication is the signature: an HMAC over the raw body with a shared secret, sent in a header the provider defines — <code>Stripe-Signature</code>, <code>X-Hub-Signature-256</code>, and so on.',
+          },
+          {
+            html: 'When it does not verify, there are two obvious reactions and both are wrong. Processing it anyway is the security hole. Dropping it on the floor is the forensic one: an unexplained forged request is exactly what you want to look at afterwards, and you cannot look at what you deleted.',
+          },
+          {
+            tone: 'accent',
+            html: 'So the event is <strong>stored</strong> with <code>verify_status = rejected</code> and a reason, the caller gets a 401, and no delivery row is created. Kept as evidence, never treated as work. Those are separate decisions and the schema keeps them on separate axes: <code>verify_status</code> answers <em>is this real</em>, <code>deliveries.status</code> answers <em>did it get there</em>.',
+          },
+          {
+            tone: 'warn',
+            html: 'A range replay skips rejected events on purpose. Sweeping a time window and accidentally acting on a payload nobody could prove came from the provider is not a mistake you want available by default.',
+          },
+        ],
+        predict: {
+          question: 'A request arrives with a signature that does not verify. What happens to it?',
+          options: [
+            'Rejected and discarded — nothing is written',
+            'Stored as rejected evidence, returned a 401, never delivered',
+            'Stored and delivered, with a warning logged',
+          ],
+          answer: 1,
+          explanation:
+            'Storing it and running it are different decisions. It is kept because you will want it during the review, and it is never enqueued because nobody could prove where it came from.',
+        },
+        ui: {
+          verifierLabel: 'Signature verification',
+          verifierOn: 'Configured',
+          verifierOff: 'None for this source',
+          verified: 'Verified',
+          unverified: 'Unverified',
+          rejected: 'Rejected',
+          delivered: 'Delivered',
+          evidence: 'Stored as evidence, no delivery row',
+          reason: 'reason',
         },
       },
     },

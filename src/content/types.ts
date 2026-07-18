@@ -43,20 +43,35 @@ export type SectionContent = {
   ui: Record<string, string>
 }
 
-export type KafkaContent = {
+/**
+ * A lab page: heading, intro, one nav label per section, and the sections.
+ *
+ * Generic over the section map so each lab keeps named sections rather than a
+ * bag of strings — a typo in a section key should not compile.
+ */
+export type LabContent<Sections> = {
   /** page-level heading and intro */
   title: string
   intro: Block[]
   nav: string[]
-  sections: {
-    writePath: SectionContent
-    partitions: SectionContent
-    groups: SectionContent
-    rebalance: SectionContent
-    offsets: SectionContent
-    deadLetters: SectionContent
-  }
+  sections: Sections
 }
+
+export type KafkaContent = LabContent<{
+  writePath: SectionContent
+  partitions: SectionContent
+  groups: SectionContent
+  rebalance: SectionContent
+  offsets: SectionContent
+  deadLetters: SectionContent
+}>
+
+export type HookkeepContent = LabContent<{
+  persistFirst: SectionContent
+  retryBackoff: SectionContent
+  replay: SectionContent
+  signature: SectionContent
+}>
 
 export type HomeContent = {
   title: string
@@ -65,18 +80,24 @@ export type HomeContent = {
   /** the principles that explain why the labs are built the way they are */
   principles: { title: string; body: string }[]
   labsHeading: string
-  kafkaCard: {
-    title: string
-    summary: string
-    topics: string[]
-    cta: string
-  }
+  /** one card per lab, in the order they should be shown */
+  labs: LabCard[]
+}
+
+export type LabCard = {
+  /** locale-independent route, e.g. /kafka — localePath() prefixes it */
+  path: string
+  title: string
+  summary: string
+  topics: string[]
+  cta: string
 }
 
 /** Repositories a lab points at. Kept next to the content so both locales share it. */
 export const REPOS = {
   lab: 'https://github.com/YusufDrymz/lab',
   kafkaDlq: 'https://github.com/YusufDrymz/kafka-dlq',
+  hookkeep: 'https://github.com/YusufDrymz/hookkeep',
   site: 'https://yusufdariyemez.com',
 } as const
 
@@ -110,4 +131,5 @@ export type Content = {
   chrome: Chrome
   home: HomeContent
   kafka: KafkaContent
+  hookkeep: HookkeepContent
 }

@@ -53,20 +53,36 @@ export const tr: Content = {
       },
     ],
     labsHeading: 'Lab\'lar',
-    kafkaCard: {
-      title: 'Kafka, davranışıyla',
-      summary:
-        'Kafka\'nın hata anında gerçekte ne yaptığı üzerine altı bölüm — ilk byte broker\'a ulaşmadan önce, atomik olmayan o iki yazma işleminden başlayarak.',
-      topics: [
-        'Dual write, outbox ve CDC',
-        'Key routing ve hot partition\'lar',
-        'Consumer group\'lar ve paralellik tavanı',
-        'Rebalance tıkanmaları',
-        'At-most-once ve at-least-once',
-        'Dead letter\'lar ve döngüye giren replay',
-      ],
-      cta: 'Lab\'ı aç',
-    },
+    labs: [
+      {
+        path: '/kafka',
+        title: 'Kafka, davranışıyla',
+        summary:
+          'Kafka\'nın hata anında gerçekte ne yaptığı üzerine altı bölüm — ilk byte broker\'a ulaşmadan önce, atomik olmayan o iki yazma işleminden başlayarak.',
+        topics: [
+          'Dual write, outbox ve CDC',
+          'Key routing ve hot partition\'lar',
+          'Consumer group\'lar ve paralellik tavanı',
+          'Rebalance tıkanmaları',
+          'At-most-once ve at-least-once',
+          'Dead letter\'lar ve döngüye giren replay',
+        ],
+        cta: 'Lab\'ı aç',
+      },
+      {
+        path: '/hookkeep',
+        title: 'Webhook\'lar ve nereye gittikleri',
+        summary:
+          'Sağlayıcı event\'i ilettiğini söylüyor. Senin veritabanının böyle bir event\'ten haberi yok. Bu iki gerçek arasındaki boşluk üzerine dört bölüm — ve çözümün neden sıkıcı olduğu: önce yaz.',
+        topics: [
+          'Persist-first ve forward-first',
+          'Exponential backoff ve jitter neden şart',
+          'Hâlâ replay edilebilen dead letter\'lar',
+          'Reddedilen imzalar: kanıt, iş değil',
+        ],
+        cta: 'Lab\'ı aç',
+      },
+    ],
   },
 
   kafka: {
@@ -335,6 +351,203 @@ export const tr: Content = {
           deployFix: 'Düzeltmeyi deploy et',
           toolNote:
             'Bunu gerçek bir cluster üzerinde yapmak {tool} işi — indexlenmiş dead letter\'lar, filtreli replay ve production\'a dokunmadan önce bir dry run.',
+        },
+      },
+    },
+  },
+
+  hookkeep: {
+    title: 'Webhook\'lar ve nereye gittikleri',
+    intro: [
+      {
+        html: 'Sağlayıcı sana bir event gönderiyor ve hızlıca 2xx bekliyor. Endpoint\'in yavaş, ya da restart oluyor, ya da kısa süreliğine düşük. Sağlayıcı birkaç kez deniyor, vazgeçiyor ve iletimi başarısız olarak işaretliyor — ya da daha kötüsü, başarılı olarak. Günler sonra biri hiç düşmemiş bir ödemeyi fark ediyor.',
+      },
+      {
+        html: 'Asıl soru endpoint\'in neden düştüğü değil. Endpoint\'ler düşer. Soru şu: sonrasında elinde ne kaldı? Bunun cevabı aylar önce yazdığın tek bir sıralama satırında belli olmuştu — event, sağlayıcıya "tamamdır" demeden önce mi yoksa sonra mı kendi deponuza yazıldı?',
+      },
+      {
+        tone: 'muted',
+        html: 'Bu tamamen tarayıcında çalışıyor. Sunucu da yok, network çağrısı da: <code>hookkeep</code>\'in deterministik bir modeli, yani aynı seed hep aynı incident\'ı oynatıyor. Status isimleri gerçek şemadan alındı.',
+      },
+    ],
+    nav: ['Önce yaz', 'Retry', 'Replay', 'İmzalar'],
+
+    sections: {
+      persistFirst: {
+        title: 'Webhook nereye gitti?',
+        lede: 'Sağlayıcının panosunda 200 yazıyor. Senin veritabanının bu event\'ten haberi yok. İkisi de doğru söylüyor.',
+        prose: [
+          {
+            html: 'Bir webhook alıcısının iki işi var ve bunları hangi sırayla yaptığı tasarımın tamamı. Sağlayıcıya cevap vermek zorunda, bir de event\'i kalıcı hale getirmek. Sırayı ters yaparsan tutamayacağın bir söz vermiş olursun.',
+          },
+          {
+            html: '<strong>Forward-first</strong> doğal görünür: event\'i al, işleyecek olana ver, o başarılı olunca yaz. Verimli bile hissettirir — birazdan işin biteceği bir şeyi neden saklayasın? Sorun <em>sonra</em> kelimesinde. Ack ile yazma arasındaki her şey yalnızca bellekte duruyor ve bir deploy senin belleğini beklemez.',
+          },
+          {
+            tone: 'danger',
+            html: 'Process o aralıkta ölürse event gecikmez — <strong>yok olur</strong>. Sağlayıcı 2xx\'ini çoktan aldı, yani denemeyi bıraktı. Bir daha kimse göndermeyecek. Sağlayıcının suçu sanılan hata budur ve sağlayıcının suçu değildir.',
+          },
+          {
+            html: '<strong>Persist-first</strong> sıkıcı olan alternatif ve <code>hookkeep</code>\'in seçtiği yol: ham body\'yi ve header\'ları Postgres\'e yaz, ancak ondan sonra cevap ver. O yazma başarısız olursa 500 dönersin — asla sahte bir 200 değil — ve sağlayıcı tekrar dener; retry mantığı zaten tam olarak bunun için var.',
+          },
+          {
+            tone: 'accent',
+            html: 'İzlenecek sayaç <strong>risk altında</strong>: sağlayıcının iletildiğine inandığı ama diskte hiçbir yerde bulunmayan event\'ler. Persist-first\'te bu yapısal olarak sıfırdır. İddianın tamamı bu.',
+          },
+        ],
+        predict: {
+          question:
+            'Forward-first modunda, bir event iletilirken process restart oluyor. Sağlayıcı ne yapar?',
+          options: [
+            'Tekrar dener, çünkü iletim hiç tamamlanmadı',
+            'Hiçbir şey — zaten 200 aldı ve event\'i iletilmiş sayıyor',
+            'Event\'i bir dead-letter endpoint\'ine gönderir',
+          ],
+          answer: 1,
+          explanation:
+            'Ack en başta gönderildi, yani sağlayıcı açısından iş bitti. Seni kurtaracak olan şey — retry mekanizması — kendi 200\'ün tarafından kapatıldı.',
+        },
+        ui: {
+          modeLabel: 'Yazma sırası',
+          persistFirst: 'Önce yaz',
+          forwardFirst: 'Önce ilet',
+          crash: 'Process\'i restart et',
+          stored: 'Diskte',
+          delivered: 'İletildi',
+          atRisk: 'Risk altında',
+          lost: 'Tamamen kayıp',
+          providerView: 'Sağlayıcının sandığı',
+          ourView: 'Gerçekte elindeki',
+        },
+      },
+
+      retryBackoff: {
+        title: 'Endpoint düştü. Şimdi ne olacak?',
+        lede: 'Tekrar denemek kolay. Toparlanmanı ikinci bir kesintiye çevirmeden denemek, atlanan kısım.',
+        prose: [
+          {
+            html: 'Endpoint\'i düşür ve denemeleri izle. Aralık sabit kalmıyor — ikiye katlanıyor: <code>base * 2^(attempt-1)</code>, haftaya sarkmasın diye bir tavanla sınırlı. Zorlanan bir downstream daha seyrek darbe alıyor, daha sık değil; naif bir retry döngüsünün yaptığının tam tersi.',
+          },
+          {
+            html: 'Süs gibi duran kısım <strong>jitter</strong>, her aralıkta ±%20. O olmadan aynı kesinti sırasında başarısız olan bütün iletimler aynı anda geri geliyor. Endpoint toparlanıyor, tüm birikmiş yükü tek bir sivri uç olarak alıyor ve yeniden yıkılıyor — üstelik artık tüm filo senkronize olduğu için bu her retry turunda tekrarlanıyor.',
+          },
+          {
+            html: 'Yapılandırılan deneme sayısı dolunca iletim <code>dead</code> olarak işaretleniyor. Bu kelime yanlış anlaşılıyor, o yüzden açık olalım: dead, atıldı demek değil. Satır duruyor, body duruyor, üçüncü bölüm de zaten onu geri getirmekle ilgili.',
+          },
+          {
+            tone: 'warn',
+            html: 'Asıl kötü durum <code>down</code> değil — <code>slow</code>. Bir timeout, endpoint\'in cevap vermeyi bırakmadan önce isteği işleyip işlemediği hakkında sana hiçbir şey söylemez. Tekrar denemek duplicate olabilir, dememek kayıp olabilir. Event id\'sinin her iletimle birlikte gitmesinin sebebi bu: alıcı dedup yapar, gönderen de tahmin etmek zorunda kalmaz.',
+          },
+        ],
+        predict: {
+          question: 'Zaten exponential olan bir backoff\'a neden rastgele jitter eklenir?',
+          options: [
+            'Denemeleri bir saldırgan için tahmin edilemez kılmak için',
+            'Birlikte başarısız olan iletimler birlikte denemesin, endpoint\'i yeniden kırmasın diye',
+            'Yükü worker process\'lere eşit dağıtmak için',
+          ],
+          answer: 1,
+          explanation:
+            'Ortak bir kesinti, başarısız olan tüm iletimleri aynı takvime senkronize eder. Jitter bu aynı adımlılığı bozar; toparlanma tek bir sürü hâlinde değil, yayılarak gelir.',
+        },
+        ui: {
+          endpointLabel: 'Endpoint',
+          up: 'Ayakta',
+          slow: 'Yavaş',
+          down: 'Düşük',
+          delivered: 'İletildi',
+          retrying: 'Tekrar deniyor',
+          dead: 'Dead',
+          attempts: 'deneme',
+          nextIn: 'sonraki deneme',
+          waiting: 'bekliyor',
+        },
+      },
+
+      replay: {
+        title: 'Replay: yalnızca senin yapabileceğin kısım',
+        lede: 'Sağlayıcı günler önce denemeyi bıraktı. Event hâlâ duruyor — çünkü kopya senin.',
+        prose: [
+          {
+            html: 'Endpoint\'i geri getir ve dead iletimleri replay et. Boşluk kapanıyor. Bunda kayda değer hiçbir şey yok, asıl mesele de bu: veri hiç kaybolmadıysa toparlanma olaysız geçer.',
+          },
+          {
+            html: 'Alternatifiyle karşılaştır. Event hiç kalıcı hale getirilmediyse çalıştıracak bir replay de yok — sağlayıcı çoktan yoluna gitti, retry penceresi kapandı ve geriye kalan tek yol bir şirkete geçen salıdan kalma bir şeyi yeniden göndermesini rica eden bir destek talebi. Önce yazmak, bir incident\'ı angaryaya çeviren şeydir.',
+          },
+          {
+            tone: 'warn',
+            html: 'Replay at-least-once\'tır ve bunun için özür dilemez: zaten başarılı olmuş event\'leri de yeniden gönderir, çünkü consumer\'ının onlarla ne yaptığını bilemez. Her iletim, alıcının dedup yapabilmesi için event id\'sini bir header\'da taşır. Handler\'ın idempotent değilse, bunu replay sırasında öğrenirsin.',
+          },
+          {
+            tone: 'accent',
+            html: 'Ateşlemeden önce dry-run yap. Endpoint hâlâ bozukken çalıştırılan bir replay hiçbir şeyi düzeltmez — aynı iletimleri tekrar <code>dead</code> durumuna yürütür ve orijinal zaman damgalarını taze bir başarısızlık turunun altına gömer.',
+          },
+        ],
+        predict: {
+          question: 'Endpoint hâlâ düşükken dead iletimleri yine de replay ediyorsun. Sonra?',
+          options: [
+            'Kuyruğa girip endpoint toparlanınca iletilirler',
+            'Denemelerini yeniden tüketip tekrar dead olurlar',
+            'Endpoint sağlıksızken replay çalışmayı reddeder',
+          ],
+          answer: 1,
+          explanation:
+            'Replay yeniden kuyruğa alır; dünyanın düzelmesini beklemez. Hiçbir şey düzelmediği için aynı denemeler aynı şekilde başarısız olur. Önce düzelt, sonra replay et — dersin tamamı bu sıralama.',
+        },
+        ui: {
+          replay: 'Dead iletimleri replay et',
+          bringUp: 'Endpoint\'i ayağa kaldır',
+          dryRunPrefix: 'Dry run:',
+          dryRunGood: 'replay edilecek ve artık başarılı olmalı.',
+          dryRunBad: 'replay edilecek — endpoint hâlâ sağlıksız, yani yine ölecekler.',
+          dead: 'Dead',
+          delivered: 'İletildi',
+          replayed: 'replay ile',
+          toolNote:
+            'Bunu gerçek trafik üzerinde çalıştırmak {tool} işi — her event ham body\'siyle saklanır, id ya da zaman aralığıyla replay edilir ve production\'a dokunmadan önce dry run alınır.',
+        },
+      },
+
+      signature: {
+        title: 'Doğrulanmayan bir imza',
+        lede: 'Biri webhook URL\'ine istek atıyor. Adres public, elbette atabilir. Ne saklanmalı, ne çalıştırılmalı?',
+        prose: [
+          {
+            html: 'Ingest endpoint\'inin sağlayıcı tarafından erişilebilir olması gerekir, bu da herkes tarafından erişilebilir olması demektir. Kimlik doğrulaması imzadır: paylaşılan bir secret ile ham body üzerinde HMAC, sağlayıcının belirlediği bir header\'da — <code>Stripe-Signature</code>, <code>X-Hub-Signature-256</code>, vesaire.',
+          },
+          {
+            html: 'Doğrulanmadığında iki akla yatkın tepki var ve ikisi de yanlış. Yine de işlemek güvenlik açığı. Çöpe atmak ise adli olanı: açıklanamayan sahte bir istek, sonrasında tam olarak bakmak isteyeceğin şeydir ve sildiğin şeye bakamazsın.',
+          },
+          {
+            tone: 'accent',
+            html: 'Bu yüzden event <strong>saklanıyor</strong>: <code>verify_status = rejected</code> ve bir sebep, isteği yapana 401, oluşturulan delivery satırı yok. Kanıt olarak tutulur, iş olarak asla ele alınmaz. Bunlar ayrı kararlar ve şema onları ayrı eksenlerde tutuyor: <code>verify_status</code> <em>bu gerçek mi</em> sorusuna, <code>deliveries.status</code> <em>ulaştı mı</em> sorusuna cevap veriyor.',
+          },
+          {
+            tone: 'warn',
+            html: 'Aralık replay\'i rejected event\'leri bilerek atlar. Bir zaman penceresini süpürürken sağlayıcıdan geldiği kanıtlanamayan bir payload üzerinde kazara işlem yapmak, varsayılan olarak elinin altında olmasını isteyeceğin bir hata değil.',
+          },
+        ],
+        predict: {
+          question: 'Doğrulanmayan bir imzayla istek geldi. Bu isteğe ne olur?',
+          options: [
+            'Reddedilir ve atılır — hiçbir şey yazılmaz',
+            'Rejected kanıt olarak saklanır, 401 döner, asla iletilmez',
+            'Saklanır ve iletilir, log\'a bir uyarı düşülür',
+          ],
+          answer: 1,
+          explanation:
+            'Saklamak ile çalıştırmak ayrı kararlardır. İnceleme sırasında lazım olacağı için tutulur, nereden geldiği kanıtlanamadığı için asla kuyruğa alınmaz.',
+        },
+        ui: {
+          verifierLabel: 'İmza doğrulama',
+          verifierOn: 'Tanımlı',
+          verifierOff: 'Bu source için yok',
+          verified: 'Doğrulandı',
+          unverified: 'Doğrulanmamış',
+          rejected: 'Reddedildi',
+          delivered: 'İletildi',
+          evidence: 'Kanıt olarak saklandı, delivery satırı yok',
+          reason: 'sebep',
         },
       },
     },
