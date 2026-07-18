@@ -43,7 +43,16 @@ server {
     root $APP_DIR/current;
     index index.html;
 
-    # Single-page site: unknown paths fall back to the document rather than 404.
+    # The build prerenders one directory per route (dist/kafka/index.html), so
+    # nginx answers a bare /kafka with a 301 that adds the trailing slash. That
+    # redirect must be relative: Cloudflare terminates TLS, so nginx believes it
+    # is serving plain HTTP and an absolute Location would send the visitor to
+    # http://, downgrading the scheme on every prerendered route.
+    absolute_redirect off;
+
+    # Prerendered routes are served from their directory; anything unknown falls
+    # back to the app document rather than 404, which is what keeps client-side
+    # routes working on a fresh load.
     location / {
         try_files \$uri \$uri/ /index.html;
     }
