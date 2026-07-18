@@ -1,0 +1,69 @@
+@import 'tailwindcss';
+
+/*
+ * One visual alphabet for the whole site. A reader should never have to relearn
+ * what a colour means when they move to the next section.
+ *
+ *   ink        text and structure
+ *   accent     Kafka records, the thing that moves
+ *   healthy    processed, committed, safe
+ *   warn       retried, delayed, stalled
+ *   danger     lost, poisoned, dead
+ */
+@theme {
+  --color-ink-50: #f6f7f9;
+  --color-ink-200: #d7dbe2;
+  --color-ink-400: #98a2b3;
+  --color-ink-600: #4a5567;
+  --color-ink-800: #232a36;
+  --color-ink-900: #151a23;
+  --color-ink-950: #0d1117;
+
+  --color-accent-400: #4dc3e8;
+  --color-accent-500: #00add8;
+  --color-accent-600: #0089ab;
+
+  --color-healthy-500: #2fa36b;
+  --color-warn-500: #d99a2b;
+  --color-danger-500: #d1495b;
+
+  --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, monospace;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--color-ink-950);
+  color: var(--color-ink-50);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Records animate between partitions; keep it subtle enough to read. */
+.record-enter-active,
+.record-leave-active {
+  transition: opacity 220ms ease, transform 220ms ease;
+}
+.record-enter-from {
+  opacity: 0;
+  transform: translateY(-6px);
+}
+.record-leave-to {
+  opacity: 0;
+  transform: translateX(10px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .record-enter-active,
+  .record-leave-active {
+    transition: none;
+  }
+  html {
+    scroll-behavior: auto;
+  }
+}
