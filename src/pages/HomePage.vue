@@ -40,6 +40,12 @@ const localePath = useLocalePath()
           :to="localePath(lab.path)"
           class="group flex flex-col rounded-xl border border-ink-800 bg-ink-900/40 p-6 transition hover:border-accent-500/60 hover:bg-ink-900/70 sm:p-8"
         >
+          <!-- The subject, because the titles are phrased as symptoms: "The
+               same request, twice" does not tell a scanner it is about
+               idempotency. -->
+          <p class="mb-2 font-mono text-[11px] tracking-widest text-accent-600 uppercase">
+            {{ lab.topic }}
+          </p>
           <h3
             class="text-2xl font-semibold tracking-tight text-ink-50 transition group-hover:text-accent-400"
           >
