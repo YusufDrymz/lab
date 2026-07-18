@@ -68,17 +68,21 @@ function clamp(text: string, limit = 158): string {
 function titleFor(card: LabCard): string {
   const haystack = card.title.toLocaleLowerCase('en')
 
-  // Word-wise rather than whole-string: the topic "Apache Kafka" is not a
-  // substring of "Kafka, by behaviour", and prefixing it would produce
-  // "Apache Kafka: Kafka, by behaviour". Short words are ignored so a stray
-  // "and" or "the" cannot count as the subject being present.
-  const present = card.topic
+  // Match on the topic's head noun — its last significant word — not on the
+  // whole string and not on any word.
+  //
+  // Whole-string fails "Apache Kafka" against "Kafka, by behaviour" and yields
+  // "Apache Kafka: Kafka, by behaviour". Any-word fails the other way: "Query
+  // plans" counts as present in "This query will fall over in production",
+  // which contains *query* but never *plan*, so the page still cannot rank for
+  // the term that names it. The head noun is the word that has to be there.
+  const words = card.topic
     .toLocaleLowerCase('en')
     .split(/[^\p{L}]+/u)
     .filter((word) => word.length > 3)
-    .some((word) => haystack.includes(word))
+  const head = words[words.length - 1]
 
-  return present ? card.title : `${card.topic}: ${card.title}`
+  return head && haystack.includes(head) ? card.title : `${card.topic}: ${card.title}`
 }
 
 function pagesFor(locale: Locale): Page[] {
