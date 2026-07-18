@@ -19,8 +19,18 @@ import type { Locale } from './types'
 export const SITE_URL = 'https://lab.yusufdariyemez.com'
 
 export type Page = {
-  /** the served path, locale prefix included */
+  /** the route as the app knows it, locale prefix included: /kafka, /tr */
   path: string
+  /**
+   * The URL this page is actually served at.
+   *
+   * Prerendering writes dist/kafka/index.html, and nginx's `try_files $uri
+   * $uri/` answers a request for /kafka with a 301 to /kafka/ — so the served
+   * URL carries a trailing slash even though the router does not. Canonical,
+   * og:url, hreflang and the sitemap all use this form: a canonical tag that
+   * disagrees with the URL it is served at defeats the point of having one.
+   */
+  url: string
   locale: Locale
   /** the same page in the other language, for hreflang and the switcher */
   alternate: string
@@ -55,20 +65,27 @@ function pagesFor(locale: Locale): Page[] {
 
   const home: Page = {
     path: prefix || '/',
+    url: prefix ? `${prefix}/` : '/',
     locale,
-    alternate: other || '/',
+    alternate: other ? `${other}/` : '/',
     title: `${c.home.title} — ${c.home.tagline}`,
     description: clamp(plain(c.home.intro[0]?.html ?? c.home.tagline)),
   }
 
   // One entry per lab card, so adding a lab to the home page adds it here and
   // to the sitemap without a second edit.
+  //
+  // The title comes from the card rather than from a path-to-section mapping.
+  // The mapping version was `path === '/kafka' ? kafka.title : hookkeep.title`,
+  // which quietly gave a third lab the second one's title the moment one was
+  // added — a default that is wrong rather than absent.
   const labs = c.home.labs.map((card): Page => {
-    const labTitle = card.path === '/kafka' ? c.kafka.title : c.hookkeep.title
+    const labTitle = card.title
     return {
       path: `${prefix}${card.path}`,
+      url: `${prefix}${card.path}/`,
       locale,
-      alternate: `${other}${card.path}`,
+      alternate: `${other}${card.path}/`,
       title: `${labTitle} — lab`,
       description: clamp(card.summary),
     }

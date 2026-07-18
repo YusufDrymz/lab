@@ -56,8 +56,11 @@ const escape = (value) =>
     .replace(/"/g, '&quot;')
 
 function headFor(page, siteUrl) {
-  const url = `${siteUrl}${page.path === '/' ? '' : page.path}`
-  const alternate = `${siteUrl}${page.alternate === '/' ? '' : page.alternate}`
+  // page.url, not page.path: nginx serves these directory-backed routes with a
+  // trailing slash, and a canonical that disagrees with the served URL is worse
+  // than none.
+  const url = `${siteUrl}${page.url === '/' ? '/' : page.url}`
+  const alternate = `${siteUrl}${page.alternate === '/' ? '/' : page.alternate}`
   const enUrl = page.locale === 'en' ? url : alternate
   const trUrl = page.locale === 'tr' ? url : alternate
 
@@ -110,8 +113,8 @@ async function main() {
     '<urlset xmlns="http://www.sitemap.org/schemas/sitemap/0.9"'.replace('www.sitemap.org', 'www.sitemaps.org'),
     '        xmlns:xhtml="http://www.w3.org/1999/xhtml">',
     ...PAGES.map((page) => {
-      const url = `${SITE_URL}${page.path === '/' ? '' : page.path}`
-      const alternate = `${SITE_URL}${page.alternate === '/' ? '' : page.alternate}`
+      const url = `${SITE_URL}${page.url === '/' ? '/' : page.url}`
+      const alternate = `${SITE_URL}${page.alternate === '/' ? '/' : page.alternate}`
       const en = page.locale === 'en' ? url : alternate
       const tr = page.locale === 'tr' ? url : alternate
       return [
