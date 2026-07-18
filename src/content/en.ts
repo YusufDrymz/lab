@@ -113,6 +113,20 @@ export const en: Content = {
         ],
         cta: 'Open the lab',
       },
+      {
+        path: '/reconcile',
+        topic: 'Data integrity',
+        title: 'The numbers do not add up',
+        summary:
+          'Nothing is down, every dashboard is green, and the total is wrong. Four sections on the failures that survive monitoring, and on alerting in a way somebody can act on.',
+        topics: [
+          'A join that inflates the total summed over it',
+          'Orphaned rows, and the evidence that names them',
+          'Late is not lost: min_age and max_age',
+          'Fail loud, and compensate for replica lag',
+        ],
+        cta: 'Open the lab',
+      },
     ],
   },
 
@@ -972,6 +986,213 @@ export const en: Content = {
           exitFail: 'exit 1',
           toolNote:
             'Snapshotting the shape into a committed plans.lock.json and comparing it on every build is what {tool} does — which is how it fails on a dropped index without failing on a moved literal.',
+        },
+      },
+    },
+  },
+
+  reconcile: {
+    topic: 'Data integrity',
+    title: 'The numbers do not add up',
+    intro: [
+      {
+        html: 'Nothing is down. No error was logged, no alert fired, every dashboard is green. And the total in the report does not match the total in the database, or a payment exists that belongs to no order, or a row everyone swears was written is not there.',
+      },
+      {
+        html: 'These are the failures that survive monitoring, because monitoring watches whether the system is <em>running</em>. A process can be perfectly healthy while the data it produces quietly stops making sense — and by the time someone notices, the wrong number has been in a report for a month.',
+      },
+      {
+        tone: 'muted',
+        html: 'Two tools, two halves. <code>data-watchdog</code> runs read-only checks against a live database and shouts, with the query that shows you the offending rows. <code>go-reconcile</code> goes back to the provider for records that were never confirmed and repairs them. This runs in your browser; the check types, the <code>expect</code> language, the severities and the outcomes are theirs.',
+      },
+    ],
+    nav: ['Row multiplication', 'Orphans', 'Late, not lost', 'Fail loud'],
+
+    sections: {
+      multiplication: {
+        title: 'The join that inflates the total',
+        lede: 'Every row in the result is real. The sum over them is not.',
+        prose: [
+          {
+            html: 'A payment has fees — a commission, sometimes an FX charge, sometimes an instalment fee. Join the two tables and you get one row per fee, which is exactly what a join is for and exactly what you asked for.',
+          },
+          {
+            tone: 'danger',
+            html: 'Then sum <code>p.amount</code> over that result. A payment with three fees contributes its amount <strong>three times</strong>. The total is inflated, every row behind it is genuine, and nothing in the output looks wrong — which is why this survives review. It is the most common way a reporting query lies.',
+          },
+          {
+            html: 'The fix is to stop the fan-out before the aggregate: sum the payments on their own, or aggregate the fees in a subquery and join to that. Not <code>SUM(DISTINCT p.amount)</code> — that is a different and wronger fix, because two payments that happen to be for the same amount would collapse into one.',
+          },
+          {
+            tone: 'accent',
+            html: 'Watch what this does to a check. The threshold is right, the SQL runs, the number comes back — and it is a number that was never true of the data. A check written over a fan-out does not fail; it passes for the wrong reason, or fails and sends you hunting for money that was never missing.',
+          },
+        ],
+        predict: {
+          question:
+            'Eight payments, twelve fee rows. What does SUM(p.amount) over the join return?',
+          options: [
+            'The sum of the eight payments',
+            'More than that — each payment counted once per fee',
+            'An error, because the join is ambiguous',
+          ],
+          answer: 1,
+          explanation:
+            'The join produces twelve rows and the sum runs over twelve rows. Each payment appears as many times as it has fees, so its amount is added that many times. Every row is real; the total is not.',
+        },
+        ui: {
+          fanoutLabel: 'The query',
+          withJoin: 'sum over the join',
+          withoutJoin: 'sum the payments',
+          rowsLabel: 'rows',
+          paymentsLabel: 'payments',
+          total: 'Total',
+          truth: 'Actual total',
+          inflation: 'inflated by',
+          duplicated: 'counted more than once',
+          checkLabel: 'Check',
+          evidenceLabel: 'evidence',
+          rowLabel: 'row',
+        },
+      },
+
+      orphans: {
+        title: 'A payment that belongs to no order',
+        lede: 'The count tells you something is wrong. The evidence tells you what.',
+        prose: [
+          {
+            html: 'An integrity check asserts something that should always be true: every payment references an order that exists. In SQL that is a left join and a count of the rows that found nothing — <code>expect: "= 0"</code>, and any other answer is a violation.',
+          },
+          {
+            html: 'How these appear is rarely mysterious in hindsight. An order was deleted while a payment still pointed at it. A backfill inserted rows with an id that was never valid. A migration ran in the wrong order. None of it raises an error at the time; the constraint that would have caught it is the one nobody added.',
+          },
+          {
+            tone: 'accent',
+            html: 'A count on its own is a bad alert. <em>Three orphans</em> at three in the morning means reproducing the query by hand before you can even start. So the check carries an <code>evidence_sql</code>, runs it when it fails, and puts the first five offending rows in the report — an alert you can act on rather than one you have to investigate first.',
+          },
+          {
+            tone: 'warn',
+            html: 'Those rows stay in the report. The webhook payload deliberately carries the check, the value, the threshold and the evidence <em>query</em> — but not the rows themselves, because an alerting endpoint is not somewhere to spill customer data.',
+          },
+        ],
+        predict: {
+          question: 'The orphan check fails with a count of 3. What does the alert need to be useful?',
+          options: [
+            'The count, and a link to the dashboard',
+            'The rows themselves, or the query that finds them',
+            'A retry, in case it was transient',
+          ],
+          answer: 1,
+          explanation:
+            'A count says something is wrong and nothing about what. Carrying the evidence query — and the first few rows — is the difference between an alert you can act on and one that starts with reproducing the problem by hand.',
+        },
+        ui: {
+          orphansLabel: 'Orphaned payments',
+          addOrphan: 'Break one more',
+          repair: 'Repair them',
+          checkLabel: 'Check',
+          evidenceLabel: 'evidence',
+          rowLabel: 'row',
+          noRows: 'no rows',
+        },
+      },
+
+      recovery: {
+        title: 'Late is not lost',
+        lede: 'A record that has not been confirmed yet is not a record that failed. Ask too early and you race the answer.',
+        prose: [
+          {
+            html: 'Some payments sit in <code>pending</code> because the confirmation never arrived. Most of them are not broken — the webhook is simply late, and it will land in the next few seconds. A reconciler that asks the provider about every pending row the moment it appears spends its day racing deliveries that were already on their way.',
+          },
+          {
+            html: 'So the scan takes a window. <strong>min_age</strong> is how long a record must sit before anyone asks about it: below that it is too young, and left alone. <strong>max_age</strong> is the far edge — past it, this is not a transient failure any more, and guessing is worse than escalating. Those records belong in front of a person.',
+          },
+          {
+            tone: 'accent',
+            html: 'The provider answers one question: did this actually succeed? If yes, we simply never heard, and repairing it is exactly right. If no, the correct action is to <strong>do nothing</strong>. A reconciler that "fixes" the ones that genuinely failed is not recovering payments, it is inventing them.',
+          },
+          {
+            tone: 'warn',
+            html: 'And it fails open. One provider error marks that candidate failed and the batch carries on; the record stays pending and the next pass tries again. A recovery job that aborts the whole run on the first bad response is a recovery job that never finishes a backlog.',
+          },
+        ],
+        predict: {
+          question: 'The provider says a pending payment never succeeded. What should the reconciler do?',
+          options: [
+            'Mark it paid — that is what reconciling means',
+            'Nothing. It failed; there is nothing to recover',
+            'Retry the charge',
+          ],
+          answer: 1,
+          explanation:
+            'Reconciling means making our record match what really happened. What really happened is that it failed, so the pending row is already correct. Marking it paid would invent a payment nobody made.',
+        },
+        ui: {
+          minAge: 'min_age',
+          maxAge: 'max_age',
+          providerLabel: 'Provider says',
+          succeeded: 'it succeeded',
+          notSucceeded: 'it never succeeded',
+          errors: 'it errors',
+          runScan: 'Run a scan',
+          scanned: 'Scanned',
+          reconciled: 'Reconciled',
+          skipped: 'Skipped',
+          failed: 'Failed',
+          tooYoung: 'too young',
+          abandoned: 'abandoned',
+          candidates: 'Pending payments',
+          toolNote:
+            'The worker that does this — pluggable source, provider and reconciler, with the window and the fail-open behaviour built in — is {tool}.',
+        },
+      },
+
+      failLoud: {
+        title: 'A watchdog that cannot see',
+        lede: 'Silence and health look identical from the outside. Only one of them is safe to assume.',
+        prose: [
+          {
+            html: 'Checks fail to run. The connection drops, a statement times out, someone renames a column. The tempting behaviour is to log it and carry on with the checks that did work — and the result is a run that reports no violations, which is indistinguishable from a run where everything was fine.',
+          },
+          {
+            tone: 'danger',
+            html: 'So a check that cannot run <strong>counts as violated</strong>. It has no value and no threshold, its message says it failed to run, and the exit code is non-zero. A watchdog that cannot see is not allowed to report all quiet.',
+          },
+          {
+            html: 'The other half of not crying wolf is knowing what you are looking at. The newest row on a read replica is at least one replication lag old, so a freshness check comparing it against the primary\'s threshold calls perfectly healthy traffic stale. Adding the measured lag to the limit fixes that — and the lag gets its own check, so a replica genuinely far behind is still reported rather than excused.',
+          },
+          {
+            tone: 'accent',
+            html: 'Severity shapes the report, not the outcome: <code>crit</code> and <code>warn</code> both exit 1, and the summary counts them separately. What decides the exit code is whether anything was violated at all — including the checks that never got to run.',
+          },
+        ],
+        predict: {
+          question:
+            'The newest row on a replica is 48 seconds old, the limit is 30, and the replica is 20 seconds behind. Violation?',
+          options: [
+            'Yes — 48 is over the 30-second limit',
+            'No — the limit becomes 50 once the lag is accounted for',
+            'Only if the lag has its own check',
+          ],
+          answer: 1,
+          explanation:
+            'What the replica can see is already 20 seconds behind the primary, so comparing it against the primary\'s threshold measures the replication, not the traffic. The lag is added to the limit — and watched separately, so a replica that is genuinely far behind still gets reported.',
+        },
+        ui: {
+          ageLabel: 'newest row age',
+          limitLabel: 'max_age',
+          replicaLabel: 'Target',
+          primary: 'Primary',
+          replica: 'Replica',
+          lagLabel: 'replica lag',
+          breakCheck: 'Break the connection',
+          fixCheck: 'Restore it',
+          checkLabel: 'Checks',
+          evidenceLabel: 'evidence',
+          rowLabel: 'row',
+          exit: 'exit',
+          toolNote:
+            'The binary that runs these against a live database, with evidence queries and webhook alerts, is {tool}.',
         },
       },
     },

@@ -113,6 +113,20 @@ export const tr: Content = {
         ],
         cta: 'Lab\'ı aç',
       },
+      {
+        path: '/reconcile',
+        topic: 'Veri bütünlüğü',
+        title: 'Sayılar tutmuyor',
+        summary:
+          'Hiçbir şey düşmüş değil, bütün dashboard\'lar yeşil ve toplam yanlış. Monitoring\'den sağ çıkan hatalar ve üzerine gidilebilir alarm üretmek üzerine dört bölüm.',
+        topics: [
+          'Üzerinden toplam alınan join\'in şişirmesi',
+          'Öksüz satırlar ve onları adıyla veren kanıt',
+          'Kayıp değil geç: min_age ve max_age',
+          'Yüksek sesle hata ver, replica lag\'i telafi et',
+        ],
+        cta: 'Lab\'ı aç',
+      },
     ],
   },
 
@@ -972,6 +986,213 @@ export const tr: Content = {
           exitFail: 'exit 1',
           toolNote:
             'Şekli commit\'lenmiş bir plans.lock.json\'a alıp her build\'de karşılaştırmak {tool} işi — düşmüş bir index\'te fail edip kaymış bir literal\'de etmemesinin sebebi de bu.',
+        },
+      },
+    },
+  },
+
+  reconcile: {
+    topic: 'Veri bütünlüğü',
+    title: 'Sayılar tutmuyor',
+    intro: [
+      {
+        html: 'Hiçbir şey düşmüş değil. Log\'a hata düşmedi, alarm çalmadı, bütün dashboard\'lar yeşil. Ama rapordaki toplam veritabanındaki toplamla uyuşmuyor, ya da hiçbir siparişe ait olmayan bir ödeme duruyor, ya da herkesin yazıldığına yemin ettiği bir satır ortada yok.',
+      },
+      {
+        html: 'Bunlar monitoring\'den sağ çıkan hatalar, çünkü monitoring sistemin <em>çalışıp çalışmadığına</em> bakar. Bir process gayet sağlıklı olabilirken ürettiği veri sessizce anlamsızlaşabilir — ve biri fark ettiğinde yanlış sayı çoktan bir aydır raporda duruyordur.',
+      },
+      {
+        tone: 'muted',
+        html: 'İki araç, iki yarım. <code>data-watchdog</code> canlı veritabanına read-only check\'ler koşup bağırıyor, üstelik sorunlu satırları gösteren sorguyla birlikte. <code>go-reconcile</code> hiç doğrulanmamış kayıtlar için sağlayıcıya geri dönüp onları onarıyor. Bu tarayıcında çalışıyor; check tipleri, <code>expect</code> dili, severity\'ler ve outcome\'lar onlardan.',
+      },
+    ],
+    nav: ['Satır çarpımı', 'Öksüz kayıtlar', 'Kayıp değil, geç', 'Yüksek sesle hata'],
+
+    sections: {
+      multiplication: {
+        title: 'Toplamı şişiren join',
+        lede: 'Sonuçtaki her satır gerçek. Üzerlerinden alınan toplam değil.',
+        prose: [
+          {
+            html: 'Bir ödemenin masrafları olur — komisyon, bazen kur farkı, bazen taksit ücreti. İki tabloyu join ettiğinde masraf başına bir satır alırsın; join\'in işi tam olarak bu ve senin istediğin de tam olarak bu.',
+          },
+          {
+            tone: 'danger',
+            html: 'Sonra o sonuç üzerinden <code>p.amount</code>\'u topla. Üç masrafı olan bir ödeme tutarını <strong>üç kez</strong> katıyor. Toplam şişiyor, arkasındaki her satır gerçek ve çıktıda yanlış görünen hiçbir şey yok — review\'dan sağ çıkmasının sebebi de bu. Bir raporlama sorgusunun yalan söylemesinin en yaygın yolu budur.',
+          },
+          {
+            html: 'Çözüm, çarpımı aggregate\'ten önce durdurmak: ödemeleri kendi başına topla, ya da masrafları bir subquery\'de toplayıp ona join et. <code>SUM(DISTINCT p.amount)</code> değil — o farklı ve daha yanlış bir çözüm, çünkü tesadüfen aynı tutarlı iki ödeme tek satıra iner.',
+          },
+          {
+            tone: 'accent',
+            html: 'Bunun bir check\'e ne yaptığına bak. Eşik doğru, SQL çalışıyor, sayı geliyor — ve o sayı veri için hiçbir zaman doğru olmamış bir sayı. Çarpım üzerine yazılmış bir check hata vermez; yanlış sebeple geçer, ya da hata verip seni hiç kaybolmamış bir parayı aramaya yollar.',
+          },
+        ],
+        predict: {
+          question:
+            'Sekiz ödeme, on iki masraf satırı. Join üzerinden SUM(p.amount) ne döner?',
+          options: [
+            'Sekiz ödemenin toplamı',
+            'Ondan fazlası — her ödeme masrafı kadar sayılır',
+            'Hata, çünkü join belirsiz',
+          ],
+          answer: 1,
+          explanation:
+            'Join on iki satır üretiyor ve toplam on iki satır üzerinde koşuyor. Her ödeme kaç masrafı varsa o kadar kez görünüyor, yani tutarı o kadar kez ekleniyor. Her satır gerçek; toplam değil.',
+        },
+        ui: {
+          fanoutLabel: 'Sorgu',
+          withJoin: 'join üzerinden topla',
+          withoutJoin: 'ödemeleri topla',
+          rowsLabel: 'satır',
+          paymentsLabel: 'ödeme',
+          total: 'Toplam',
+          truth: 'Gerçek toplam',
+          inflation: 'şişme',
+          duplicated: 'birden fazla kez sayıldı',
+          checkLabel: 'Check',
+          evidenceLabel: 'kanıt',
+          rowLabel: 'satır',
+        },
+      },
+
+      orphans: {
+        title: 'Hiçbir siparişe ait olmayan ödeme',
+        lede: 'Sayı bir şeyin yanlış olduğunu söyler. Kanıt neyin yanlış olduğunu.',
+        prose: [
+          {
+            html: 'Bir integrity check\'i hep doğru olması gereken bir şeyi iddia eder: her ödeme var olan bir siparişe referans verir. SQL\'de bu bir left join ve hiçbir şey bulamayan satırların sayımıdır — <code>expect: "= 0"</code>, ve başka her cevap bir ihlaldir.',
+          },
+          {
+            html: 'Bunların nasıl oluştuğu geriye dönüp bakınca nadiren gizemlidir. Bir ödeme hâlâ işaret ederken sipariş silinmiştir. Bir backfill hiç geçerli olmamış bir id\'yle satır eklemiştir. Bir migration yanlış sırada koşmuştur. Hiçbiri o an hata vermez; yakalayacak olan constraint, kimsenin eklemediğidir.',
+          },
+          {
+            tone: 'accent',
+            html: 'Tek başına bir sayı kötü bir alarmdır. Gecenin üçünde <em>üç öksüz kayıt</em> demek, daha başlamadan sorguyu elle yeniden yazmak demek. Bu yüzden check bir <code>evidence_sql</code> taşır, ihlal anında onu çalıştırır ve ilk beş sorunlu satırı rapora koyar — araştırmakla başlaman gereken değil, üzerine gidebileceğin bir alarm.',
+          },
+          {
+            tone: 'warn',
+            html: 'O satırlar raporda kalır. Webhook payload\'ı bilerek check\'i, değeri, eşiği ve kanıt <em>sorgusunu</em> taşır — satırların kendisini değil; çünkü bir alarm endpoint\'i müşteri verisinin dökülecek yeri değildir.',
+          },
+        ],
+        predict: {
+          question: 'Öksüz check\'i 3 sayısıyla hata verdi. Alarmın işe yaraması için ne gerekir?',
+          options: [
+            'Sayı ve dashboard\'a bir link',
+            'Satırların kendisi, ya da onları bulan sorgu',
+            'Bir retry, geçici bir durumsa diye',
+          ],
+          answer: 1,
+          explanation:
+            'Bir sayı, bir şeyin yanlış olduğunu söyler, neyin yanlış olduğunu söylemez. Kanıt sorgusunu — ve ilk birkaç satırı — taşımak, üzerine gidebileceğin bir alarmla, problemi elle yeniden üretmekle başlayan bir alarm arasındaki farktır.',
+        },
+        ui: {
+          orphansLabel: 'Öksüz ödemeler',
+          addOrphan: 'Bir tane daha boz',
+          repair: 'Onar',
+          checkLabel: 'Check',
+          evidenceLabel: 'kanıt',
+          rowLabel: 'satır',
+          noRows: 'satır yok',
+        },
+      },
+
+      recovery: {
+        title: 'Kayıp değil, geç',
+        lede: 'Henüz doğrulanmamış bir kayıt, başarısız olmuş bir kayıt değildir. Çok erken sorarsan cevabı yarışa sokarsın.',
+        prose: [
+          {
+            html: 'Bazı ödemeler <code>pending</code>\'de bekler çünkü doğrulama hiç gelmemiştir. Çoğu bozuk değildir — webhook sadece geç kalmıştır ve birkaç saniye içinde düşecektir. Beliren her pending satır için sağlayıcıya hemen soran bir reconciler, gününü zaten yolda olan teslimatlarla yarışarak geçirir.',
+          },
+          {
+            html: 'Bu yüzden tarama bir pencere alır. <strong>min_age</strong>, bir kaydın sorulmadan önce ne kadar beklemesi gerektiğidir: altındakiler fazla genç sayılır ve dokunulmaz. <strong>max_age</strong> ise uzak kenardır — onu geçtiyse bu artık geçici bir hata değildir ve tahmin yürütmek eskalasyondan kötüdür. O kayıtlar bir insanın önüne gitmelidir.',
+          },
+          {
+            tone: 'accent',
+            html: 'Sağlayıcı tek bir soruya cevap verir: bu gerçekten başarılı oldu mu? Evetse biz sadece duymamışızdır ve onarmak tam olarak doğrudur. Hayırsa doğru davranış <strong>hiçbir şey yapmamaktır</strong>. Gerçekten başarısız olanları "düzelten" bir reconciler ödeme kurtarmıyor, ödeme uyduruyordur.',
+          },
+          {
+            tone: 'warn',
+            html: 'Ve fail-open çalışır. Bir sağlayıcı hatası o adayı failed işaretler, batch devam eder; kayıt pending kalır ve sonraki tur yeniden dener. İlk kötü cevapta bütün koşuyu iptal eden bir kurtarma işi, hiçbir birikmiş yükü bitiremeyen bir kurtarma işidir.',
+          },
+        ],
+        predict: {
+          question: 'Sağlayıcı, pending bir ödemenin hiç başarılı olmadığını söylüyor. Reconciler ne yapmalı?',
+          options: [
+            'Paid işaretlemeli — reconcile etmek bu demek',
+            'Hiçbir şey. Başarısız olmuş; kurtarılacak bir şey yok',
+            'Tahsilatı yeniden denemeli',
+          ],
+          answer: 1,
+          explanation:
+            'Reconcile etmek, kaydımızı gerçekte olanla eşitlemek demek. Gerçekte olan şey başarısızlık, yani pending satır zaten doğru. Paid işaretlemek, kimsenin yapmadığı bir ödemeyi uydurmak olurdu.',
+        },
+        ui: {
+          minAge: 'min_age',
+          maxAge: 'max_age',
+          providerLabel: 'Sağlayıcı diyor ki',
+          succeeded: 'başarılı oldu',
+          notSucceeded: 'hiç başarılı olmadı',
+          errors: 'hata veriyor',
+          runScan: 'Tarama yap',
+          scanned: 'Tarandı',
+          reconciled: 'Onarıldı',
+          skipped: 'Atlandı',
+          failed: 'Hata',
+          tooYoung: 'fazla genç',
+          abandoned: 'terk edildi',
+          candidates: 'Bekleyen ödemeler',
+          toolNote:
+            'Bunu yapan worker — takılabilir source, provider ve reconciler, penceresi ve fail-open davranışı içinde — {tool}.',
+        },
+      },
+
+      failLoud: {
+        title: 'Göremeyen bir bekçi',
+        lede: 'Sessizlik ile sağlık dışarıdan aynı görünür. İkisinden yalnızca biri varsayılması güvenli olandır.',
+        prose: [
+          {
+            html: 'Check\'ler çalışamaz hâle gelir. Bağlantı kopar, bir statement timeout alır, biri bir kolonun adını değiştirir. Cazip davranış bunu log\'layıp çalışan check\'lerle devam etmektir — ve sonuç, hiç ihlal raporlamayan bir koşudur; yani her şeyin yolunda olduğu bir koşudan ayırt edilemeyen bir koşu.',
+          },
+          {
+            tone: 'danger',
+            html: 'Bu yüzden çalışamayan bir check <strong>ihlal sayılır</strong>. Değeri yoktur, eşiği yoktur, mesajı çalışamadığını söyler ve exit kodu sıfırdan farklıdır. Göremeyen bir bekçinin "her şey sakin" deme hakkı yoktur.',
+          },
+          {
+            html: 'Kurda kurt dememenin diğer yarısı, neye baktığını bilmektir. Bir read replica\'da görünen en yeni satır en az bir replikasyon lag\'i kadar eskidir; yani onu primary\'nin eşiğiyle karşılaştıran bir freshness check\'i gayet sağlıklı trafiğe bayat der. Ölçülen lag\'i limite eklemek bunu düzeltir — ve lag\'in kendi check\'i olur, böylece gerçekten geride kalmış bir replica mazur görülmek yerine yine raporlanır.',
+          },
+          {
+            tone: 'accent',
+            html: 'Severity raporu şekillendirir, sonucu değil: <code>crit</code> de <code>warn</code> de 1 ile çıkar ve özet ikisini ayrı sayar. Exit kodunu belirleyen şey, herhangi bir ihlal olup olmadığıdır — hiç çalışamamış check\'ler dahil.',
+          },
+        ],
+        predict: {
+          question:
+            'Replica\'daki en yeni satır 48 saniyelik, limit 30 ve replica 20 saniye geride. İhlal mi?',
+          options: [
+            'Evet — 48, 30 saniyelik limitin üstünde',
+            'Hayır — lag hesaba katılınca limit 50 oluyor',
+            'Yalnızca lag\'in kendi check\'i varsa',
+          ],
+          answer: 1,
+          explanation:
+            'Replica\'nın görebildiği şey zaten primary\'den 20 saniye geride, yani onu primary\'nin eşiğiyle karşılaştırmak trafiği değil replikasyonu ölçer. Lag limite eklenir — ve ayrıca izlenir, böylece gerçekten çok geride kalmış bir replica yine raporlanır.',
+        },
+        ui: {
+          ageLabel: 'en yeni satırın yaşı',
+          limitLabel: 'max_age',
+          replicaLabel: 'Hedef',
+          primary: 'Primary',
+          replica: 'Replica',
+          lagLabel: 'replica lag',
+          breakCheck: 'Bağlantıyı kopar',
+          fixCheck: 'Geri getir',
+          checkLabel: 'Check\'ler',
+          evidenceLabel: 'kanıt',
+          rowLabel: 'satır',
+          exit: 'exit',
+          toolNote:
+            'Bunları canlı bir veritabanına karşı koşan, kanıt sorguları ve webhook alarmlarıyla birlikte gelen binary {tool}.',
         },
       },
     },

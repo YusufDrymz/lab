@@ -8,7 +8,7 @@ import type { SectionContent } from '../types'
  * sections are compared as plain records; the typed shapes differ per lab and
  * nothing here cares which keys they are, only that both locales agree.
  */
-const LABS = ['kafka', 'hookkeep', 'idempotency', 'plans'] as const
+const LABS = ['kafka', 'hookkeep', 'idempotency', 'plans', 'reconcile'] as const
 
 const sectionsOf = (
   content: typeof en | typeof tr,

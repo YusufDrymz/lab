@@ -94,6 +94,13 @@ export type PlansContent = LabContent<{
   shape: SectionContent
 }>
 
+export type ReconcileContent = LabContent<{
+  multiplication: SectionContent
+  orphans: SectionContent
+  recovery: SectionContent
+  failLoud: SectionContent
+}>
+
 export type HomeContent = {
   title: string
   tagline: string
@@ -123,6 +130,8 @@ export const REPOS = {
   hookkeep: 'https://github.com/YusufDrymz/hookkeep',
   goIdempotent: 'https://github.com/YusufDrymz/go-idempotent',
   pgPlanGuard: 'https://github.com/YusufDrymz/pg-plan-guard',
+  dataWatchdog: 'https://github.com/YusufDrymz/data-watchdog',
+  goReconcile: 'https://github.com/YusufDrymz/go-reconcile',
   site: 'https://yusufdariyemez.com',
 } as const
 
@@ -159,4 +168,5 @@ export type Content = {
   hookkeep: HookkeepContent
   idempotency: IdempotencyContent
   plans: PlansContent
+  reconcile: ReconcileContent
 }
