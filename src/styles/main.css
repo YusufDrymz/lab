@@ -11,10 +11,21 @@
  *   danger     lost, poisoned, dead
  */
 @theme {
+  /*
+   * The ramp is complete on purpose. `text-ink-500`, `text-ink-300`,
+   * `border-ink-700` and `border-ink-500` are used 56 times across the
+   * components, and Tailwind emitted no rule for any of them: an undefined
+   * token is not an error, it is simply nothing, so those elements silently
+   * inherited their parent's colour. The three steps added here interpolate
+   * the ones that were already there.
+   */
   --color-ink-50: #f6f7f9;
   --color-ink-200: #d7dbe2;
+  --color-ink-300: #b7beca;
   --color-ink-400: #98a2b3;
+  --color-ink-500: #717b8d;
   --color-ink-600: #4a5567;
+  --color-ink-700: #363f4e;
   --color-ink-800: #232a36;
   --color-ink-900: #151a23;
   --color-ink-950: #0d1117;
