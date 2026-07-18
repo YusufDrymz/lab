@@ -21,6 +21,7 @@ incident, and pause / step / restart work exactly as you would expect.
 | [Kafka, by behaviour](https://lab.yusufdariyemez.com/kafka) | Apache Kafka | 6 |
 | [Webhooks, and where they go](https://lab.yusufdariyemez.com/hookkeep) | Webhooks · [hookkeep](https://github.com/YusufDrymz/hookkeep) | 4 |
 | [The same request, twice](https://lab.yusufdariyemez.com/idempotency) | Idempotency · [go-idempotent](https://github.com/YusufDrymz/go-idempotent) | 4 |
+| [This query will fall over in production](https://lab.yusufdariyemez.com/plans) | Query plans · [pg-plan-guard](https://github.com/YusufDrymz/pg-plan-guard) | 4 |
 
 ---
 
@@ -73,13 +74,33 @@ through, so it retries. Attaching a key is the easy half.
 
 Status codes and state names are the ones go-idempotent returns.
 
+## This query will fall over in production
+
+Three milliseconds on your laptop, forty seconds in production, and the SQL
+never changed. An index was dropped, a column got wrapped in a function, a
+statistic went stale — and the plan quietly became a different plan.
+
+![A dropped index: the baseline's Bitmap Heap Scan has become a Seq Scan, the shape hashes differ, and the check exits 1 with a crit finding](docs/plans.jpg)
+
+| # | Section | What it demonstrates |
+|---|---------|----------------------|
+| 0 | Lost index | A btree on `email` cannot serve `lower(email) = ?` — the index would have to be evaluated per row, which is the scan it was avoiding. Nothing warns you; a functional index on the same expression brings the lookup back. |
+| 1 | Scale | Sequential scans are the right plan on a small table and the incident on a large one. Drag the row count and watch the ratio go from 1× to 31×, because one curve is linear in the table and the other flattens once the matched window stops growing. |
+| 2 | Bad estimate | A nested loop is unbeatable when the outer side really is small. Make the statistics stale and the planner picks it for 30 rows that turn out to be 12,000 — the same plan, one inner lookup per row it did not expect. |
+| 3 | Plan shape | Costs, row counts and literals are stripped; `Materialize`, `Memoize`, `Gather` and `Gather Merge` are dropped when they have one child; an `Index Scan` and a `Bitmap Heap Scan` over the same index are equivalent. What survives is a regression worth failing a build over. |
+
+Node names, normalisation rules, finding codes and severities are taken from
+pg-plan-guard. It is a model of *why* a plan changes, not a planner — see below.
+
 ---
 
 ## What it is not
 
-Not an emulator, in any of the three. There is no Kafka wire protocol, no
+Not an emulator, in any of the four. There is no Kafka wire protocol, no
 replication or leader election; no HTTP stack or Postgres behind the webhook
-inbox; no real HMAC behind the signature section. Each model reproduces the
+inbox; no real HMAC behind the signature section; and the query planner reads no
+statistics and costs no alternatives — it derives a plan shape from table size,
+index availability and the quality of the row estimate. Each model reproduces the
 behaviour its section is about and nothing more, and where it simplifies, the
 prose says so.
 
@@ -100,6 +121,7 @@ The interesting code is in `src/core/` — pure TypeScript, no Vue, no DOM:
 - `partition.ts` — a port of Kafka's murmur2 partitioner
 - `webhook.ts` — the webhook inbox: persist order, backoff, replay, verification
 - `idempotency.ts` — stored responses, the claim race, fingerprints, release
+- `plans.ts` — plan derivation, shape normalisation, and the diff that grades it
 - `prng.ts` — seeded RNG; `Math.random()` is not used anywhere in the core
 
 Each model is a pure `advance(state) -> state` function. The UI is the only part
