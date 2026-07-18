@@ -57,6 +57,7 @@ export const en: Content = {
     labs: [
       {
         path: '/kafka',
+        topic: 'Apache Kafka',
         title: 'Kafka, by behaviour',
         summary:
           'Six sections on what Kafka actually does under failure — starting before the first byte reaches a broker, with the two writes that are not atomic.',
@@ -72,6 +73,7 @@ export const en: Content = {
       },
       {
         path: '/hookkeep',
+        topic: 'Webhooks',
         title: 'Webhooks, and where they go',
         summary:
           'The provider says it delivered the event. Your database has never heard of it. Four sections on the gap between those two facts, and on why the fix is boring: write it down first.',
@@ -83,10 +85,25 @@ export const en: Content = {
         ],
         cta: 'Open the lab',
       },
+      {
+        path: '/idempotency',
+        topic: 'Idempotency',
+        title: 'The same request, twice',
+        summary:
+          'A payment times out and the client retries. Four sections on why a key is the easy half, and on the window between checking for one and claiming it.',
+        topics: [
+          'Why a timeout tells you nothing',
+          'Stored responses and Idempotent-Replay',
+          'Check-then-claim vs INSERT ... ON CONFLICT',
+          'Fingerprints, 422, and releasing a burnt key',
+        ],
+        cta: 'Open the lab',
+      },
     ],
   },
 
   kafka: {
+    topic: 'Apache Kafka',
     title: 'Kafka, by behaviour',
     intro: [
       {
@@ -361,6 +378,7 @@ export const en: Content = {
   },
 
   hookkeep: {
+    topic: 'Webhooks',
     title: 'Webhooks, and where they go',
     intro: [
       {
@@ -552,6 +570,202 @@ export const en: Content = {
           delivered: 'Delivered',
           evidence: 'Stored as evidence, no delivery row',
           reason: 'reason',
+        },
+      },
+    },
+  },
+
+  idempotency: {
+    topic: 'Idempotency',
+    title: 'The same request, twice',
+    intro: [
+      {
+        html: 'A payment request times out. The client has no idea whether the charge went through — a timeout is the absence of an answer, not an answer — so it does the only sensible thing and retries. Did the customer just pay twice?',
+      },
+      {
+        html: 'Almost everyone reaches for the same fix: attach a key, check whether you have seen it before. That part is easy and it is not where this goes wrong. It goes wrong in the gap between checking and claiming, which is invisible until two requests arrive in the same millisecond.',
+      },
+      {
+        tone: 'muted',
+        html: 'This runs entirely in your browser. There is no server and no network call: it is a deterministic model of <code>go-idempotent</code>, so the same seed always replays the same incident. Status codes and state names are the ones the library actually returns.',
+      },
+    ],
+    nav: ['Unprotected', 'With a key', 'The race', 'Same key, new body'],
+
+    sections: {
+      unprotected: {
+        title: 'The retry that charges twice',
+        lede: 'Nothing here is broken. The network is slow, the client is well behaved, and the customer is billed twice.',
+        prose: [
+          {
+            html: 'Watch the sequence. The request arrives, the handler starts working, and it takes longer than the client is willing to wait. The client times out and retries — correctly, because from where it sits the request may never have been received at all.',
+          },
+          {
+            tone: 'danger',
+            html: 'The first request was never cancelled. A client timeout closes a connection; it does not reach into the server and stop the work. So both requests run, both succeed, and both charge. <strong>Two charges, two 201s, and no error anywhere in your logs.</strong>',
+          },
+          {
+            html: 'This is why retries and idempotency are the same conversation. Any client that retries — every HTTP library, every job runner, every payment provider calling your webhook — turns "at least once" into your problem. The network guarantees delivery at least once; only you can make the second one harmless.',
+          },
+          {
+            tone: 'accent',
+            html: 'Notice what the timeout does <em>not</em> tell you: whether the work happened. That single missing bit of information is the entire reason this section exists, and no amount of retry tuning recovers it.',
+          },
+        ],
+        predict: {
+          question:
+            'The client times out after 12 ticks; the handler needs 24. What has happened at tick 13?',
+          options: [
+            'The request was cancelled when the client disconnected',
+            'The handler is still running and will charge the card',
+            'The handler rolled back because nobody is listening',
+          ],
+          answer: 1,
+          explanation:
+            'Nothing told the handler that anyone stopped waiting. It finishes the work and commits the charge — to a client that already gave up and is about to send the request again.',
+        },
+        ui: {
+          send: 'Send the payment',
+          retry: 'Client retries',
+          charges: 'Charges',
+          total: 'Total billed',
+          requests: 'Requests',
+          timedOut: 'timed out',
+          processing: 'handler running',
+          doubleCharged: 'The customer was charged twice for one order.',
+        },
+      },
+
+      withKey: {
+        title: 'A key, and a stored answer',
+        lede: 'The fix is not to stop the second request. It is to make the second request harmless.',
+        prose: [
+          {
+            html: 'The client generates a key once — per payment, not per attempt — and sends it as <code>Idempotency-Key</code> on every attempt of that payment. The server stores the key alongside the response it produced.',
+          },
+          {
+            html: 'Now the retry does not run the handler. It finds a completed row, replays the stored status code and body verbatim, and adds <code>Idempotent-Replay: true</code> so the caller can tell a replay from a fresh execution. One charge, and the client still gets its answer — the <em>same</em> answer, including the charge id it missed the first time.',
+          },
+          {
+            tone: 'warn',
+            html: 'There is a timing subtlety worth pressing the button for: if the retry arrives while the first request is <em>still running</em>, there is no stored response yet, so there is nothing to replay. The library answers <code>409</code> instead. Retrying too eagerly gets you a conflict, not an answer.',
+          },
+          {
+            tone: 'accent',
+            html: 'The key belongs to the client, and that is not an implementation detail. Only the caller knows that two HTTP requests are the same intent — the server sees two identical-looking payloads and cannot tell a retry from a customer legitimately buying the same thing twice.',
+          },
+        ],
+        predict: {
+          question: 'The retry arrives 4 ticks after the first request, which needs 24. What comes back?',
+          options: [
+            'The stored response, replayed',
+            '409 — the first request has not committed anything to replay yet',
+            'It waits until the first finishes, then returns its response',
+          ],
+          answer: 1,
+          explanation:
+            'The stored response only exists after the handler commits. Until then the row is in_flight, and the library answers 409 immediately rather than holding the connection open.',
+        },
+        ui: {
+          send: 'Send the payment',
+          retry: 'Client retries',
+          retryEarly: 'Retry immediately',
+          charges: 'Charges',
+          total: 'Total billed',
+          requests: 'Requests',
+          replayed: 'replayed from store',
+          storeLabel: 'idempotency_keys',
+          fresh: 'handler ran',
+        },
+      },
+
+      race: {
+        title: 'Two requests, same millisecond',
+        lede: 'Check-then-claim is correct every time you test it by hand, and wrong the first time production sends you two at once.',
+        prose: [
+          {
+            html: 'The obvious implementation reads first: look up the key, and if it is not there, claim it and run. Sequentially this is flawless — every retry in the previous section would still be caught.',
+          },
+          {
+            tone: 'danger',
+            html: 'But the read and the write are two statements, and between them there is a window. Two requests can both read <em>nothing here</em> before either writes. Both then claim the key, both run the handler, and you are back to two charges — with idempotency code sitting right there in the stack trace, apparently doing its job.',
+          },
+          {
+            html: 'The fix is not a lock, a mutex or a queue. It is one statement that does both: <code>INSERT ... ON CONFLICT (key) DO NOTHING</code>. Whoever affects a row won the claim; whoever affects zero rows lost it and reads what the winner wrote. The database was always going to be the arbiter here — this just stops pretending otherwise.',
+          },
+          {
+            tone: 'accent',
+            html: 'The loser gets <code>409</code> straight away rather than being parked until the winner finishes. Holding the connection would give a nicer answer, but it also means a slow handler now occupies two sockets instead of one, and a stampede of retries becomes a stampede of held connections. Failing fast is the cheaper trade.',
+          },
+        ],
+        predict: {
+          question:
+            'Both requests arrive at the same instant and the endpoint uses check-then-claim. How many charges?',
+          options: [
+            'One — the key is checked before either runs',
+            'Two — both read an empty store before either writes',
+            'None — the conflicting writes cancel each other',
+          ],
+          answer: 1,
+          explanation:
+            'The check passed for both, because at the moment each of them looked, the key genuinely was not there. Atomicity is what closes that window, not the check itself.',
+        },
+        ui: {
+          protection: 'Claim strategy',
+          readThenWrite: 'Check, then claim',
+          insertOnConflict: 'INSERT ... ON CONFLICT',
+          sendBoth: 'Send both at once',
+          charges: 'Charges',
+          total: 'Total billed',
+          requests: 'Requests',
+          won: 'won the row',
+          lost: 'lost the row',
+          toolNote:
+            'The middleware that does this — atomic claim, stored response, replay header — is {tool}. The Postgres store behind it is a single table with a primary key doing the arbitration.',
+        },
+      },
+
+      fingerprint: {
+        title: 'Same key, different body',
+        lede: 'Two things that must never be confused: a retry of a request, and a different request wearing its key.',
+        prose: [
+          {
+            html: 'A key alone is not enough to prove two requests are the same. Clients reuse keys by accident — a loop variable that did not advance, a cached header, a copy-pasted curl. If the server replayed blindly, a customer paying 999 TRY would receive the stored answer for a 249.90 TRY charge and believe the larger payment succeeded.',
+          },
+          {
+            html: 'So the stored row also holds a fingerprint: a SHA-256 of the request body. On a hit, the body must match. If it does not, the answer is <code>422</code> — <em>idempotency key reused with a different request</em> — and nothing is replayed and nothing is charged. The mismatch is a bug in the caller, and it is told so rather than quietly handed someone else\'s receipt.',
+          },
+          {
+            tone: 'accent',
+            html: 'The other half of getting this right is what happens when the handler <strong>fails</strong>. The key was claimed before the work started, so a naive implementation leaves an <code>in_flight</code> row behind forever and every future retry answers 409 — the endpoint has locked itself out of a payment that never happened.',
+          },
+          {
+            html: 'The middleware releases the key when the handler does not commit. A failed request must not burn its key: the whole point of a retry is that the next attempt can still succeed. Turn the handler failure on, send a request, turn it off, and retry — the charge goes through.',
+          },
+        ],
+        predict: {
+          question:
+            'The handler crashes after the key was claimed but before any charge. What must happen to the row?',
+          options: [
+            'It stays in_flight so the request cannot be repeated',
+            'It is released, so a retry with the same key can still succeed',
+            'It is marked completed with the error response stored',
+          ],
+          answer: 1,
+          explanation:
+            'Nothing happened, so nothing should be remembered. Leaving the row claimed would make a transient failure permanent — every later retry would get a 409 for work that was never done.',
+        },
+        ui: {
+          sendOriginal: 'Pay 249.90',
+          sendDifferent: 'Reuse the key for 999.00',
+          failToggle: 'Handler fails',
+          retry: 'Retry same key',
+          charges: 'Charges',
+          total: 'Total billed',
+          requests: 'Requests',
+          storeLabel: 'idempotency_keys',
+          released: 'key released',
+          empty: 'no rows',
         },
       },
     },

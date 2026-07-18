@@ -57,6 +57,7 @@ export const tr: Content = {
     labs: [
       {
         path: '/kafka',
+        topic: 'Apache Kafka',
         title: 'Kafka, davranışıyla',
         summary:
           'Kafka\'nın hata anında gerçekte ne yaptığı üzerine altı bölüm — ilk byte broker\'a ulaşmadan önce, atomik olmayan o iki yazma işleminden başlayarak.',
@@ -72,6 +73,7 @@ export const tr: Content = {
       },
       {
         path: '/hookkeep',
+        topic: 'Webhook\'lar',
         title: 'Webhook\'lar ve nereye gittikleri',
         summary:
           'Sağlayıcı event\'i ilettiğini söylüyor. Senin veritabanının böyle bir event\'ten haberi yok. Bu iki gerçek arasındaki boşluk üzerine dört bölüm — ve çözümün neden sıkıcı olduğu: önce yaz.',
@@ -83,10 +85,25 @@ export const tr: Content = {
         ],
         cta: 'Lab\'ı aç',
       },
+      {
+        path: '/idempotency',
+        topic: 'Idempotency',
+        title: 'Aynı istek, iki kez',
+        summary:
+          'Ödeme timeout alıyor ve client tekrar deniyor. Key takmanın neden kolay yarı olduğu ve kontrol etmekle sahiplenmek arasındaki pencere üzerine dört bölüm.',
+        topics: [
+          'Timeout neden hiçbir şey söylemez',
+          'Saklanan cevaplar ve Idempotent-Replay',
+          'Önce-kontrol ile INSERT ... ON CONFLICT',
+          'Fingerprint, 422 ve yanan key\'i serbest bırakmak',
+        ],
+        cta: 'Lab\'ı aç',
+      },
     ],
   },
 
   kafka: {
+    topic: 'Apache Kafka',
     title: 'Kafka, davranışıyla',
     intro: [
       {
@@ -361,6 +378,7 @@ export const tr: Content = {
   },
 
   hookkeep: {
+    topic: 'Webhook\'lar',
     title: 'Webhook\'lar ve nereye gittikleri',
     intro: [
       {
@@ -552,6 +570,202 @@ export const tr: Content = {
           delivered: 'İletildi',
           evidence: 'Kanıt olarak saklandı, delivery satırı yok',
           reason: 'sebep',
+        },
+      },
+    },
+  },
+
+  idempotency: {
+    topic: 'Idempotency',
+    title: 'Aynı istek, iki kez',
+    intro: [
+      {
+        html: 'Bir ödeme isteği timeout aldı. Client tahsilatın gerçekleşip gerçekleşmediğini bilmiyor — timeout bir cevap değil, cevabın yokluğu — ve yapılabilecek tek makul şeyi yapıp tekrar deniyor. Müşteri az önce iki kez mi ödedi?',
+      },
+      {
+        html: 'Neredeyse herkes aynı çözüme uzanıyor: bir key tak, daha önce görüp görmediğine bak. O kısım kolay ve işlerin bozulduğu yer orası değil. İşler kontrol etmekle sahiplenmek arasındaki boşlukta bozuluyor; o boşluk da iki istek aynı milisaniyede gelene kadar görünmüyor.',
+      },
+      {
+        tone: 'muted',
+        html: 'Bu tamamen tarayıcında çalışıyor. Sunucu da yok, network çağrısı da: <code>go-idempotent</code>\'in deterministik bir modeli, yani aynı seed hep aynı incident\'ı oynatıyor. Status kodları ve state isimleri kütüphanenin gerçekten döndürdükleri.',
+      },
+    ],
+    nav: ['Korumasız', 'Key ile', 'Yarış', 'Aynı key, yeni body'],
+
+    sections: {
+      unprotected: {
+        title: 'İki kez tahsil eden retry',
+        lede: 'Burada bozuk hiçbir şey yok. Network yavaş, client düzgün davranıyor ve müşteriden iki kez para çekiliyor.',
+        prose: [
+          {
+            html: 'Sırayı izle. İstek geliyor, handler çalışmaya başlıyor ve client\'ın beklemeye razı olduğundan daha uzun sürüyor. Client timeout alıp tekrar deniyor — doğru olan da bu, çünkü onun bulunduğu yerden bakınca istek hiç ulaşmamış bile olabilir.',
+          },
+          {
+            tone: 'danger',
+            html: 'İlk istek hiçbir zaman iptal edilmedi. Client timeout\'u bir bağlantıyı kapatır; sunucunun içine uzanıp işi durdurmaz. Yani iki istek de çalışıyor, ikisi de başarılı oluyor, ikisi de tahsil ediyor. <strong>İki tahsilat, iki tane 201 ve log\'larında hiçbir hata yok.</strong>',
+          },
+          {
+            html: 'Retry ile idempotency\'nin aynı konuşma olmasının sebebi bu. Tekrar deneyen her client — her HTTP kütüphanesi, her job runner, webhook\'unu çağıran her ödeme sağlayıcısı — "en az bir kez"i senin problemin haline getiriyor. Network teslimatı en az bir kez garantiliyor; ikincisini zararsız kılabilecek tek kişi sensin.',
+          },
+          {
+            tone: 'accent',
+            html: 'Timeout\'un sana ne söyle<em>me</em>diğine dikkat et: işin olup olmadığını. Eksik olan o tek bit\'lik bilgi bu bölümün tüm varlık sebebi, ve hiçbir retry ayarı onu geri getirmiyor.',
+          },
+        ],
+        predict: {
+          question:
+            'Client 12 tick sonra timeout alıyor; handler 24 tick\'e ihtiyaç duyuyor. 13. tick\'te ne olmuş durumda?',
+          options: [
+            'Client bağlantıyı kapatınca istek iptal edildi',
+            'Handler hâlâ çalışıyor ve karttan çekecek',
+            'Kimse dinlemediği için handler rollback yaptı',
+          ],
+          answer: 1,
+          explanation:
+            'Handler\'a birinin beklemeyi bıraktığını söyleyen hiçbir şey yok. İşi bitiriyor ve tahsilatı commit ediyor — hem de çoktan vazgeçmiş ve isteği birazdan yeniden gönderecek bir client\'a.',
+        },
+        ui: {
+          send: 'Ödemeyi gönder',
+          retry: 'Client tekrar deniyor',
+          charges: 'Tahsilat',
+          total: 'Toplam kesilen',
+          requests: 'İstekler',
+          timedOut: 'timeout aldı',
+          processing: 'handler çalışıyor',
+          doubleCharged: 'Tek sipariş için müşteriden iki kez tahsil edildi.',
+        },
+      },
+
+      withKey: {
+        title: 'Bir key ve saklanan bir cevap',
+        lede: 'Çözüm ikinci isteği engellemek değil. İkinci isteği zararsız kılmak.',
+        prose: [
+          {
+            html: 'Client key\'i bir kez üretiyor — deneme başına değil, ödeme başına — ve o ödemenin her denemesinde <code>Idempotency-Key</code> olarak gönderiyor. Sunucu da key\'i ürettiği cevapla birlikte saklıyor.',
+          },
+          {
+            html: 'Artık retry handler\'ı çalıştırmıyor. Tamamlanmış bir satır buluyor, saklanan status kodunu ve body\'yi birebir tekrar oynatıyor ve çağıranın bunu taze bir çalıştırmadan ayırt edebilmesi için <code>Idempotent-Replay: true</code> ekliyor. Tek tahsilat, üstelik client cevabını da alıyor — ilk seferde kaçırdığı tahsilat id\'si dahil, <em>aynı</em> cevabı.',
+          },
+          {
+            tone: 'warn',
+            html: 'Düğmeye basıp görmeye değer bir zamanlama inceliği var: retry ilk istek <em>hâlâ çalışırken</em> gelirse ortada saklanmış bir cevap yoktur, yani tekrar oynatılacak bir şey de yoktur. Kütüphane bunun yerine <code>409</code> döner. Fazla aceleci retry sana cevabı değil, bir conflict\'i getirir.',
+          },
+          {
+            tone: 'accent',
+            html: 'Key client\'a aittir ve bu bir implementasyon detayı değil. İki HTTP isteğinin aynı niyet olduğunu yalnızca çağıran bilir — sunucu birbirinin aynı görünen iki payload görür ve bir retry ile aynı şeyi meşru şekilde iki kez satın alan bir müşteriyi ayırt edemez.',
+          },
+        ],
+        predict: {
+          question: 'Retry, 24 tick süren ilk isteğin 4 tick ardından geliyor. Geri ne döner?',
+          options: [
+            'Saklanan cevap, tekrar oynatılmış hâlde',
+            '409 — ilk istek henüz oynatılacak bir şey commit etmedi',
+            'İlk istek bitene kadar bekler, sonra onun cevabını döner',
+          ],
+          answer: 1,
+          explanation:
+            'Saklanan cevap ancak handler commit ettikten sonra var olur. O ana kadar satır in_flight\'tır ve kütüphane bağlantıyı açık tutmak yerine anında 409 döner.',
+        },
+        ui: {
+          send: 'Ödemeyi gönder',
+          retry: 'Client tekrar deniyor',
+          retryEarly: 'Hemen tekrar dene',
+          charges: 'Tahsilat',
+          total: 'Toplam kesilen',
+          requests: 'İstekler',
+          replayed: 'store\'dan oynatıldı',
+          storeLabel: 'idempotency_keys',
+          fresh: 'handler çalıştı',
+        },
+      },
+
+      race: {
+        title: 'İki istek, aynı milisaniye',
+        lede: 'Önce-kontrol-sonra-sahiplen, elle test ettiğin her seferinde doğru; production sana ilk kez iki tane aynı anda gönderdiğinde yanlış.',
+        prose: [
+          {
+            html: 'Akla gelen ilk implementasyon önce okur: key\'e bak, yoksa sahiplen ve çalıştır. Sıralı gittiğinde kusursuzdur — önceki bölümdeki her retry yine yakalanırdı.',
+          },
+          {
+            tone: 'danger',
+            html: 'Ama okuma ile yazma iki ayrı ifade ve aralarında bir pencere var. İki istek de, hiçbiri yazmadan önce <em>burada bir şey yok</em> okuyabilir. Sonra ikisi de key\'i sahipleniyor, ikisi de handler\'ı çalıştırıyor ve yine iki tahsilattasın — hem de idempotency kodu tam orada, stack trace\'te, görünüşe göre işini yaparken.',
+          },
+          {
+            html: 'Çözüm bir lock, mutex ya da queue değil. İkisini birden yapan tek bir ifade: <code>INSERT ... ON CONFLICT (key) DO NOTHING</code>. Bir satırı etkileyen sahiplenmeyi kazanmıştır; sıfır satır etkileyen kaybetmiştir ve kazananın yazdığını okur. Burada hakem zaten hep veritabanı olacaktı — bu sadece aksini varsaymayı bırakıyor.',
+          },
+          {
+            tone: 'accent',
+            html: 'Kaybeden, kazanan bitene kadar park edilmek yerine anında <code>409</code> alıyor. Bağlantıyı tutmak daha hoş bir cevap verirdi, ama aynı zamanda yavaş bir handler\'ın artık bir yerine iki socket işgal etmesi demek; ve retry akını da tutulan bağlantı akınına dönüşür. Hızlı başarısız olmak daha ucuz takas.',
+          },
+        ],
+        predict: {
+          question:
+            'İki istek aynı anda geliyor ve endpoint önce-kontrol-sonra-sahiplen kullanıyor. Kaç tahsilat olur?',
+          options: [
+            'Bir — key ikisi de çalışmadan önce kontrol ediliyor',
+            'İki — ikisi de hiçbiri yazmadan önce boş store okuyor',
+            'Hiç — çakışan yazmalar birbirini iptal ediyor',
+          ],
+          answer: 1,
+          explanation:
+            'Kontrol ikisi için de geçti, çünkü her biri baktığı anda key gerçekten orada değildi. O pencereyi kapatan şey kontrolün kendisi değil, atomiklik.',
+        },
+        ui: {
+          protection: 'Sahiplenme stratejisi',
+          readThenWrite: 'Kontrol et, sonra sahiplen',
+          insertOnConflict: 'INSERT ... ON CONFLICT',
+          sendBoth: 'İkisini aynı anda gönder',
+          charges: 'Tahsilat',
+          total: 'Toplam kesilen',
+          requests: 'İstekler',
+          won: 'satırı kazandı',
+          lost: 'satırı kaybetti',
+          toolNote:
+            'Bunu yapan middleware — atomik sahiplenme, saklanan cevap, replay header\'ı — {tool}. Arkasındaki Postgres store\'u ise hakemliği primary key\'e yaptıran tek bir tablo.',
+        },
+      },
+
+      fingerprint: {
+        title: 'Aynı key, farklı body',
+        lede: 'Asla karıştırılmaması gereken iki şey: bir isteğin retry\'ı ile onun key\'ini takmış farklı bir istek.',
+        prose: [
+          {
+            html: 'İki isteğin aynı olduğunu kanıtlamaya tek başına bir key yetmez. Client\'lar key\'leri kazara tekrar kullanır — ilerlemeyen bir döngü değişkeni, cache\'lenmiş bir header, kopyala-yapıştır bir curl. Sunucu körlemesine tekrar oynatsaydı, 999 TRY ödeyen bir müşteri 249,90 TRY\'lik tahsilatın saklanmış cevabını alır ve büyük ödemenin başarılı olduğunu sanırdı.',
+          },
+          {
+            html: 'Bu yüzden saklanan satır bir fingerprint de tutuyor: request body\'sinin SHA-256\'sı. İsabet olduğunda body\'nin eşleşmesi gerekiyor. Eşleşmezse cevap <code>422</code> — <em>idempotency key reused with a different request</em> — ve hiçbir şey oynatılmıyor, hiçbir şey tahsil edilmiyor. Uyuşmazlık çağıranın hatası ve ona sessizce başkasının makbuzu uzatılmak yerine bu söyleniyor.',
+          },
+          {
+            tone: 'accent',
+            html: 'İşin doğru yapılmasının diğer yarısı handler <strong>başarısız olduğunda</strong> ne olduğu. Key iş başlamadan önce sahiplenildiği için naif bir implementasyon arkada sonsuza kadar <code>in_flight</code> bir satır bırakır ve sonraki her retry 409 alır — endpoint hiç gerçekleşmemiş bir ödemeye karşı kendini kilitlemiştir.',
+          },
+          {
+            html: 'Middleware, handler commit etmediğinde key\'i serbest bırakıyor. Başarısız bir istek key\'ini yakmamalı: retry\'ın bütün anlamı, bir sonraki denemenin hâlâ başarılı olabilmesi. Handler hatasını aç, bir istek gönder, sonra kapat ve tekrar dene — tahsilat geçiyor.',
+          },
+        ],
+        predict: {
+          question:
+            'Handler, key sahiplenildikten sonra ama herhangi bir tahsilat öncesinde çöküyor. Satıra ne olmalı?',
+          options: [
+            'in_flight kalmalı ki istek tekrarlanamasın',
+            'Serbest bırakılmalı ki aynı key\'le retry hâlâ başarılı olabilsin',
+            'Hata cevabı saklanarak completed işaretlenmeli',
+          ],
+          answer: 1,
+          explanation:
+            'Hiçbir şey olmadı, dolayısıyla hiçbir şey hatırlanmamalı. Satırı sahiplenilmiş bırakmak geçici bir hatayı kalıcı yapardı — sonraki her retry, hiç yapılmamış bir iş için 409 alırdı.',
+        },
+        ui: {
+          sendOriginal: '249,90 öde',
+          sendDifferent: 'Aynı key\'i 999,00 için kullan',
+          failToggle: 'Handler başarısız',
+          retry: 'Aynı key\'le tekrar dene',
+          charges: 'Tahsilat',
+          total: 'Toplam kesilen',
+          requests: 'İstekler',
+          storeLabel: 'idempotency_keys',
+          released: 'key serbest bırakıldı',
+          empty: 'satır yok',
         },
       },
     },

@@ -50,6 +50,13 @@ export type SectionContent = {
  * bag of strings — a typo in a section key should not compile.
  */
 export type LabContent<Sections> = {
+  /**
+   * The subject in plain words — `Idempotency`, `Apache Kafka`. Shown above the
+   * heading, because the headings are deliberately phrased as symptoms ("The
+   * same request, twice") and a reader scanning for a topic should not have to
+   * infer it. It is also the term anyone searching for this would type.
+   */
+  topic: string
   /** page-level heading and intro */
   title: string
   intro: Block[]
@@ -73,6 +80,13 @@ export type HookkeepContent = LabContent<{
   signature: SectionContent
 }>
 
+export type IdempotencyContent = LabContent<{
+  unprotected: SectionContent
+  withKey: SectionContent
+  race: SectionContent
+  fingerprint: SectionContent
+}>
+
 export type HomeContent = {
   title: string
   tagline: string
@@ -87,6 +101,8 @@ export type HomeContent = {
 export type LabCard = {
   /** locale-independent route, e.g. /kafka — localePath() prefixes it */
   path: string
+  /** mirrors the lab's own `topic`; parity.test.ts keeps the two in step */
+  topic: string
   title: string
   summary: string
   topics: string[]
@@ -98,6 +114,7 @@ export const REPOS = {
   lab: 'https://github.com/YusufDrymz/lab',
   kafkaDlq: 'https://github.com/YusufDrymz/kafka-dlq',
   hookkeep: 'https://github.com/YusufDrymz/hookkeep',
+  goIdempotent: 'https://github.com/YusufDrymz/go-idempotent',
   site: 'https://yusufdariyemez.com',
 } as const
 
@@ -132,4 +149,5 @@ export type Content = {
   home: HomeContent
   kafka: KafkaContent
   hookkeep: HookkeepContent
+  idempotency: IdempotencyContent
 }

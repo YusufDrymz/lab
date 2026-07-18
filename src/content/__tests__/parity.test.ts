@@ -8,7 +8,7 @@ import type { SectionContent } from '../types'
  * sections are compared as plain records; the typed shapes differ per lab and
  * nothing here cares which keys they are, only that both locales agree.
  */
-const LABS = ['kafka', 'hookkeep'] as const
+const LABS = ['kafka', 'hookkeep', 'idempotency'] as const
 
 const sectionsOf = (
   content: typeof en | typeof tr,
@@ -125,6 +125,27 @@ describe('locale parity', () => {
       const count = Object.keys(sectionsOf(en, lab)).length
       expect(en[lab].nav, `en ${lab}`).toHaveLength(count)
       expect(tr[lab].nav, `tr ${lab}`).toHaveLength(count)
+    }
+  })
+
+  it('keeps every lab card in step with the lab it links to', () => {
+    // seo.ts builds each page's <title> from the card rather than from the lab,
+    // to avoid a path-to-section mapping that silently mistitles a new lab. That
+    // is only safe while the two agree.
+    for (const content of [en, tr]) {
+      for (const card of content.home.labs) {
+        const lab = content[card.path.slice(1) as (typeof LABS)[number]]
+        expect(card.title, `${content.locale} ${card.path}: card title`).toBe(lab.title)
+        expect(card.topic, `${content.locale} ${card.path}: card topic`).toBe(lab.topic)
+      }
+    }
+  })
+
+  it('names the subject in every lab title or topic', () => {
+    // The SEO title falls back to "Topic: Title" when the title omits the
+    // subject; an empty topic would make that fallback silently useless.
+    for (const content of [en, tr]) {
+      for (const lab of LABS) expect(content[lab].topic.trim()).not.toBe('')
     }
   })
 
