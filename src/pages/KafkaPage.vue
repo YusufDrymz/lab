@@ -25,6 +25,9 @@ const ANCHORS = [
 <template>
   <div class="mx-auto max-w-6xl px-5 pb-24 sm:px-8">
     <header class="py-14">
+      <p class="mb-3 font-mono text-xs tracking-widest text-accent-500 uppercase">
+        {{ kafka.topic }}
+      </p>
       <h1 class="max-w-3xl text-4xl font-semibold tracking-tight text-ink-50 sm:text-5xl">
         {{ kafka.title }}
       </h1>

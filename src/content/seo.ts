@@ -1,5 +1,5 @@
 import { CONTENT } from './index'
-import type { Locale } from './types'
+import type { LabCard, Locale } from './types'
 
 /**
  * The per-page metadata, derived from the content rather than written twice.
@@ -58,6 +58,29 @@ function clamp(text: string, limit = 158): string {
   return `${cut.slice(0, lastSpace > 80 ? lastSpace : limit).trimEnd()}…`
 }
 
+/**
+ * The headings are written as symptoms, which reads well and searches badly:
+ * "The same request, twice" never says *idempotency*, so the page cannot rank
+ * for the word describing it. Where the title already carries the subject —
+ * "Kafka, by behaviour" — repeating it would just be noise, so this only
+ * prepends the topic when it is genuinely missing.
+ */
+function titleFor(card: LabCard): string {
+  const haystack = card.title.toLocaleLowerCase('en')
+
+  // Word-wise rather than whole-string: the topic "Apache Kafka" is not a
+  // substring of "Kafka, by behaviour", and prefixing it would produce
+  // "Apache Kafka: Kafka, by behaviour". Short words are ignored so a stray
+  // "and" or "the" cannot count as the subject being present.
+  const present = card.topic
+    .toLocaleLowerCase('en')
+    .split(/[^\p{L}]+/u)
+    .filter((word) => word.length > 3)
+    .some((word) => haystack.includes(word))
+
+  return present ? card.title : `${card.topic}: ${card.title}`
+}
+
 function pagesFor(locale: Locale): Page[] {
   const c = CONTENT[locale]
   const prefix = locale === 'tr' ? '/tr' : ''
@@ -79,17 +102,14 @@ function pagesFor(locale: Locale): Page[] {
   // The mapping version was `path === '/kafka' ? kafka.title : hookkeep.title`,
   // which quietly gave a third lab the second one's title the moment one was
   // added — a default that is wrong rather than absent.
-  const labs = c.home.labs.map((card): Page => {
-    const labTitle = card.title
-    return {
-      path: `${prefix}${card.path}`,
-      url: `${prefix}${card.path}/`,
-      locale,
-      alternate: `${other}${card.path}/`,
-      title: `${labTitle} — lab`,
-      description: clamp(card.summary),
-    }
-  })
+  const labs = c.home.labs.map((card): Page => ({
+    path: `${prefix}${card.path}`,
+    url: `${prefix}${card.path}/`,
+    locale,
+    alternate: `${other}${card.path}/`,
+    title: `${titleFor(card)} — lab`,
+    description: clamp(card.summary),
+  }))
 
   return [home, ...labs]
 }

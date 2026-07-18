@@ -3,6 +3,7 @@ import { computed, watchEffect } from 'vue'
 import { useRoute } from 'vue-router'
 import SiteHeader from './components/SiteHeader.vue'
 import { CONTENT, localeFromPath, provideContent, useAlternatePath } from './content'
+import { pageFor } from './content/seo'
 
 const route = useRoute()
 const content = computed(() => CONTENT[localeFromPath(route.path)])
@@ -17,14 +18,23 @@ provideContent(content)
 watchEffect(() => {
   const c = content.value
 
-  // The lab segment with the locale prefix stripped: '' on the home pages,
-  // otherwise 'kafka' or 'hookkeep'. Anything else is the not-found route,
-  // which falls back to the home title rather than claiming to be a lab.
-  const lab = route.path.replace(/^\/tr/, '').replace(/^\//, '')
-  const labTitle = lab === 'kafka' ? c.kafka.title : lab === 'hookkeep' ? c.hookkeep.title : null
+  // The same PAGES list the prerender writes into the served HTML, so a
+  // client-side navigation cannot disagree with what the scraper was given.
+  // Keeping a second lab-to-title mapping here is how they drift apart.
+  const page = pageFor(route.path)
 
   document.documentElement.lang = c.locale
-  document.title = labTitle ? `${labTitle} — lab` : `${c.home.title} — ${c.home.tagline}`
+  document.title = page?.title ?? `${c.home.title} — ${c.home.tagline}`
+
+  // The prerendered description is correct on first paint but goes stale the
+  // moment the router moves without a reload.
+  const description = page?.description ?? c.home.tagline
+  for (const selector of ['meta[name="description"]', 'meta[property="og:description"]']) {
+    document.head.querySelector<HTMLMetaElement>(selector)?.setAttribute('content', description)
+  }
+  document.head
+    .querySelector<HTMLMetaElement>('meta[property="og:title"]')
+    ?.setAttribute('content', document.title)
 
   const origin = window.location.origin
   const alternate = useAlternatePath(route.path, c.locale)
