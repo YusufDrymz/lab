@@ -1,5 +1,7 @@
 # lab
 
+**English** | [Türkçe](README.tr.md)
+
 Interactive explanations of backend systems — the parts that only make sense
 once you watch them fail.
 
@@ -18,7 +20,7 @@ incident, and pause / step / restart work exactly as you would expect.
 
 | Lab | Subject | Sections |
 |-----|---------|----------|
-| [Kafka, by behaviour](https://lab.yusufdariyemez.com/kafka) | Apache Kafka | 6 |
+| [Kafka, by behaviour](https://lab.yusufdariyemez.com/kafka) | Apache Kafka · [kafka-dlq](https://github.com/YusufDrymz/kafka-dlq) | 6 |
 | [Webhooks, and where they go](https://lab.yusufdariyemez.com/hookkeep) | Webhooks · [hookkeep](https://github.com/YusufDrymz/hookkeep) | 4 |
 | [The same request, twice](https://lab.yusufdariyemez.com/idempotency) | Idempotency · [go-idempotent](https://github.com/YusufDrymz/go-idempotent) | 4 |
 | [This query will fall over in production](https://lab.yusufdariyemez.com/plans) | Query plans · [pg-plan-guard](https://github.com/YusufDrymz/pg-plan-guard) | 4 |
